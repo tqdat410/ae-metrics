@@ -1,0 +1,22 @@
+.venv/
+.env
+*.db
+*.db-*
+__pycache__/
+*.py[cod]
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets — never commit
+*.pem
+*.key
+*.crt
+
+# Deploy (local only — varies per deployer)
+deploy/
+
+# Plans (local only, do not push)
+plans/
+
