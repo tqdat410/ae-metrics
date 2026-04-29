@@ -54,23 +54,47 @@ class PubgProvider:
             ranked,
         )
 
-    async def fetch_ranked_view(self, account: AccountInfo) -> dict:
+    async def fetch_account_metadata(self, account: AccountInfo) -> dict:
+        if not account.account_id:
+            raise NotFoundError("PUBG account has no account id")
+        url = f"{BASE_URL}/shards/{quote(account.region, safe='')}/players/{quote(account.account_id, safe='')}"
+        payload = await self._get_json(url, "PUBG player metadata")
+        data = payload.get("data") or {}
+        attributes = data.get("attributes") or {}
+        clan_data = (((data.get("relationships") or {}).get("clan") or {}).get("data") or {})
+        return {
+            "account_id": data.get("id") or account.account_id,
+            "name": attributes.get("name") or account.canonical_name,
+            "platform": account.region,
+            "clan_id": clan_data.get("id"),
+            "title_id": attributes.get("titleId"),
+            "shard_id": attributes.get("shardId"),
+            "patch_version": attributes.get("patchVersion"),
+            "created_at": attributes.get("createdAt"),
+            "updated_at": attributes.get("updatedAt"),
+        }
+
+    async def get_current_season(self, platform: str) -> str:
+        return await self._get_current_season(platform)
+
+    async def fetch_ranked_view(self, account: AccountInfo, mode: str = "all", season_id: str | None = None) -> dict:
         if not account.account_id:
             raise NotFoundError("PUBG account has no account id")
 
-        season_id = await self._get_current_season(account.region)
+        current_season = season_id or await self._get_current_season(account.region)
         url = (
             f"{BASE_URL}/shards/{quote(account.region, safe='')}/players/"
-            f"{quote(account.account_id, safe='')}/seasons/{quote(season_id, safe='')}/ranked"
+            f"{quote(account.account_id, safe='')}/seasons/{quote(current_season, safe='')}/ranked"
         )
         payload = await self._get_json(url, "PUBG ranked stats")
         stats = (payload.get("data") or {}).get("attributes", {}).get("rankedGameModeStats", {})
-        mode, ranked = self._preferred_mode_stats(stats)
+        selected_mode, ranked = self._mode_stats(stats, mode)
         tier = ranked.get("currentTier") or {}
         return {
             "view": "ranked",
-            "mode": mode,
-            "season_id": season_id,
+            "requested_mode": mode,
+            "mode": selected_mode,
+            "season_id": current_season,
             "tier": tier.get("tier"),
             "division": tier.get("subTier"),
             "points": ranked.get("currentRankPoint"),
@@ -81,10 +105,11 @@ class PubgProvider:
             "kd": ranked.get("kdr"),
             "damage": ranked.get("damageDealt"),
             "avg_survival_time": ranked.get("avgSurvivalTime"),
+            "modes": self._normalize_modes(stats, ranked=True),
             "raw": ranked or payload,
         }
 
-    async def fetch_lifetime_view(self, account: AccountInfo) -> dict:
+    async def fetch_lifetime_view(self, account: AccountInfo, mode: str = "all") -> dict:
         if not account.account_id:
             raise NotFoundError("PUBG account has no account id")
 
@@ -94,7 +119,7 @@ class PubgProvider:
         )
         payload = await self._get_json(url, "PUBG lifetime stats")
         stats = (payload.get("data") or {}).get("attributes", {}).get("gameModeStats", {})
-        mode, lifetime = self._preferred_mode_stats(stats)
+        selected_mode, lifetime = self._mode_stats(stats, mode)
         matches = ((payload.get("data") or {}).get("relationships") or {}).get("matches", {}).get("data") or []
         matches_played = lifetime.get("roundsPlayed") or 0
         wins = lifetime.get("wins") or 0
@@ -104,7 +129,8 @@ class PubgProvider:
             kd = round((lifetime.get("kills") or 0) / losses, 2) if losses else float(lifetime.get("kills") or 0)
         return {
             "view": "lifetime",
-            "mode": mode,
+            "requested_mode": mode,
+            "mode": selected_mode,
             "matches": matches_played,
             "wins": wins,
             "top10s": lifetime.get("top10s"),
@@ -117,8 +143,51 @@ class PubgProvider:
             "longest_kill": lifetime.get("longestKill"),
             "avg_survival_time": lifetime.get("avgSurvivalTime"),
             "recent_match_ids": [item.get("id") for item in matches if item.get("id")],
+            "modes": self._normalize_modes(stats, ranked=False),
             "raw": lifetime or payload,
         }
+
+    async def fetch_weapon_mastery(self, account: AccountInfo) -> dict:
+        if not account.account_id:
+            raise NotFoundError("PUBG account has no account id")
+        url = f"{BASE_URL}/shards/{quote(account.region, safe='')}/players/{quote(account.account_id, safe='')}/weapon_mastery"
+        payload = await self._get_json(url, "PUBG weapon mastery")
+        attributes = (payload.get("data") or {}).get("attributes") or {}
+        summary = (attributes.get("weaponMasterySummary") or {}).get("weaponSummaries") or {}
+        top_weapons = []
+        for weapon_name, weapon_stats in summary.items():
+            totals = self._weapon_totals(weapon_stats)
+            top_weapons.append(
+                {
+                    "name": weapon_name.replace("Item_Weapon_", "").replace("_C", ""),
+                    "level": weapon_stats.get("LevelCurrent") or weapon_stats.get("levelCurrent") or 0,
+                    "tier": weapon_stats.get("TierCurrent") or weapon_stats.get("tierCurrent"),
+                    "xp_total": totals.get("xpTotal"),
+                    "kills": totals.get("kills"),
+                    "defeats": totals.get("defeats"),
+                    "headshots": totals.get("headshots"),
+                }
+            )
+        top_weapons.sort(key=lambda item: (item.get("kills") or 0, item.get("defeats") or 0, item.get("level") or 0), reverse=True)
+        return {"top_weapons": top_weapons[:3], "weapon_count": len(summary), "raw": attributes or payload}
+
+    async def fetch_survival_mastery(self, account: AccountInfo) -> dict:
+        if not account.account_id:
+            raise NotFoundError("PUBG account has no account id")
+        url = f"{BASE_URL}/shards/{quote(account.region, safe='')}/players/{quote(account.account_id, safe='')}/survival_mastery"
+        payload = await self._get_json(url, "PUBG survival mastery")
+        attributes = (payload.get("data") or {}).get("attributes") or {}
+        return {
+            "level": attributes.get("survivalMasteryLevel") or attributes.get("level") or 0,
+            "xp": attributes.get("totalXp") or attributes.get("xp") or 0,
+            "tier": attributes.get("tier"),
+            "raw": attributes or payload,
+        }
+
+    async def fetch_mastery_view(self, account: AccountInfo) -> dict:
+        weapon = await self.fetch_weapon_mastery(account)
+        survival = await self.fetch_survival_mastery(account)
+        return {"weapon": weapon, "survival": survival}
 
     async def fetch_recent_match_ids(self, account: AccountInfo, limit: int = 5) -> list[str]:
         if not account.account_id:
@@ -129,6 +198,32 @@ class PubgProvider:
         matches = ((payload.get("data") or {}).get("relationships") or {}).get("matches", {}).get("data") or []
         ids = [item.get("id") for item in matches if item.get("id")]
         return ids[:limit]
+
+    async def fetch_recent_match_ids_batch(self, accounts: Iterable[AccountInfo], limit: int = 10) -> dict[str, list[str]]:
+        account_list = [account for account in accounts if account.account_id]
+        if not account_list:
+            return {}
+
+        platform = account_list[0].region
+        if any(account.region != platform for account in account_list):
+            raise ValueError("Batch recent-match fetch requires accounts from the same platform")
+
+        account_ids = [account.account_id for account in account_list if account.account_id]
+        url = f"{BASE_URL}/shards/{quote(platform, safe='')}/players"
+        payload = await self._get_json(
+            url,
+            "PUBG player matches batch",
+            params={"filter[playerIds]": ",".join(account_ids)},
+        )
+        players = payload.get("data") or []
+        recent_ids: dict[str, list[str]] = {account_id: [] for account_id in account_ids}
+        for player in players:
+            account_id = player.get("id")
+            if not account_id:
+                continue
+            matches = ((player.get("relationships") or {}).get("matches") or {}).get("data") or []
+            recent_ids[account_id] = [item.get("id") for item in matches if item.get("id")][:limit]
+        return recent_ids
 
     async def fetch_match_summary(self, account: AccountInfo, match_id: str) -> dict:
         if not account.account_id:
@@ -145,6 +240,7 @@ class PubgProvider:
             "pubg_account_id": account.account_id,
             "platform": account.region,
             "game_mode": data.get("attributes", {}).get("gameMode") or "unknown",
+            "match_type": data.get("attributes", {}).get("matchType"),
             "played_at": data.get("attributes", {}).get("createdAt") or "",
             "map_name": data.get("attributes", {}).get("mapName"),
             "placement": stats.get("winPlace"),
@@ -195,6 +291,33 @@ class PubgProvider:
             if stats:
                 return mode, stats
         return PREFERRED_GAME_MODES[0], {}
+
+    def _mode_stats(self, mode_stats: dict, requested_mode: str) -> tuple[str, dict]:
+        normalized = (requested_mode or "all").lower()
+        if normalized in {"all", "ranked"}:
+            return self._preferred_mode_stats(mode_stats)
+        return normalized, mode_stats.get(normalized) or {}
+
+    def _normalize_modes(self, mode_stats: dict, *, ranked: bool) -> dict[str, dict]:
+        normalized: dict[str, dict] = {}
+        for mode, stats in mode_stats.items():
+            if not stats:
+                continue
+            normalized[mode] = {
+                "matches": stats.get("roundsPlayed"),
+                "wins": stats.get("roundsWon" if ranked else "wins"),
+                "kills": stats.get("kills"),
+                "kd": stats.get("kdr"),
+                "damage": stats.get("damageDealt"),
+            }
+        return normalized
+
+    def _weapon_totals(self, weapon_stats: dict) -> dict:
+        for key in ("OfficialStatsTotal", "CompetitiveStatsTotal", "StatsTotal"):
+            totals = weapon_stats.get(key)
+            if totals:
+                return totals
+        return {}
 
     def _match_participant(self, account_id: str, match: dict, included: Iterable[dict]) -> dict | None:
         roster_ids = {

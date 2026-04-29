@@ -88,9 +88,10 @@ def make_compare_embed(view: str, left_member: str, right_member: str, left: dic
     return embed
 
 
-def make_leaderboard_embed(metric: str, rows: list[str]) -> discord.Embed:
-    embed = discord.Embed(title=f"PUBG leaderboard: {metric}", color=0x2563EB)
-    embed.description = "\n".join(rows) if rows else "No leaderboard data available right now."
+def make_leaderboard_embed(rows: list[str]) -> discord.Embed:
+    embed = discord.Embed(title="PUBG leaderboard: Activity 7D", color=0x2563EB)
+    embed.description = "**7D** | Hours played ranking\n\n"
+    embed.description += "\n".join(rows) if rows else "No 7D activity data available right now."
     return embed
 
 

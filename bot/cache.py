@@ -9,28 +9,54 @@ CACHE_TTL = {
     "ranked": 30 * 60,
     "lifetime": 60 * 60,
     "recent_matches": 15 * 60,
+    "source-ranked:": 30 * 60,
+    "source-lifetime:": 60 * 60,
+    "source-recent:": 15 * 60,
+    "source-mastery": 60 * 60,
+    "profile-overview:": 10 * 60,
+    "profile-ranked:": 10 * 60,
+    "profile-lifetime:": 10 * 60,
+    "profile-recent:": 10 * 60,
+    "profile-mastery:": 10 * 60,
+    "profile-analysis:": 10 * 60,
+    "profile-full:": 10 * 60,
 }
 
 
-def _payload(value: Any) -> dict[str, Any]:
+def _payload(value: Any) -> Any:
     if hasattr(value, "to_dict"):
         return value.to_dict()
     if hasattr(value, "__dict__"):
         return dict(value.__dict__)
-    return dict(value)
+    if isinstance(value, dict):
+        return dict(value)
+    return value
+
+
+def _ttl_for_view(view: str, ttl: int | None = None) -> int:
+    if ttl is not None:
+        return ttl
+    if view in CACHE_TTL:
+        return CACHE_TTL[view]
+    for prefix, prefix_ttl in CACHE_TTL.items():
+        if view.startswith(prefix):
+            return prefix_ttl
+    return 15 * 60
 
 
 async def get_or_fetch_view(
     pubg_account_id: str,
     platform: str,
     view: str,
-    fetcher: Callable[[], Awaitable[dict[str, Any]]],
-) -> tuple[dict[str, Any], bool]:
+    fetcher: Callable[[], Awaitable[Any]],
+    *,
+    ttl: int | None = None,
+) -> tuple[Any, bool]:
     cached = await db.get_cache(pubg_account_id, platform, view)
-    ttl = CACHE_TTL.get(view, 15 * 60)
+    ttl_seconds = _ttl_for_view(view, ttl)
     if cached:
         payload, age = cached
-        if age < ttl:
+        if age < ttl_seconds:
             return payload, False
 
     payload = _payload(await fetcher())

@@ -209,7 +209,7 @@ async def list_pubg_links() -> list[dict[str, Any]]:
     return [dict(row) for row in await cur.fetchall()]
 
 
-async def get_cache(pubg_account_id: str, platform: str, view: str) -> tuple[dict[str, Any], int] | None:
+async def get_cache(pubg_account_id: str, platform: str, view: str) -> tuple[Any, int] | None:
     cur = await _db().execute(
         "SELECT payload_json, updated_at FROM rank_cache WHERE pubg_account_id=? AND platform=? AND view=?",
         (pubg_account_id, platform, view),
@@ -220,7 +220,7 @@ async def get_cache(pubg_account_id: str, platform: str, view: str) -> tuple[dic
     return json.loads(row["payload_json"]), int(time.time()) - row["updated_at"]
 
 
-async def set_cache(pubg_account_id: str, platform: str, view: str, payload: dict[str, Any]) -> None:
+async def set_cache(pubg_account_id: str, platform: str, view: str, payload: Any) -> None:
     await _db().execute(
         """
         INSERT OR REPLACE INTO rank_cache(pubg_account_id, platform, view, payload_json, updated_at)
@@ -318,6 +318,23 @@ async def list_recent_match_summaries(pubg_account_id: str, platform: str, limit
     )
     rows = await cur.fetchall()
     return [json.loads(row["payload_json"]) for row in rows]
+
+
+async def list_match_activity_since(played_at_cutoff: str) -> list[dict[str, Any]]:
+    cur = await _db().execute(
+        """
+        SELECT
+            pubg_account_id,
+            platform,
+            COUNT(*) AS match_count,
+            COALESCE(SUM(survival_time_seconds), 0) AS total_survival_seconds
+        FROM match_summaries
+        WHERE played_at >= ?
+        GROUP BY pubg_account_id, platform
+        """,
+        (played_at_cutoff,),
+    )
+    return [dict(row) for row in await cur.fetchall()]
 
 
 async def upsert_stat_snapshot(

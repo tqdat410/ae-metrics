@@ -1,9 +1,8 @@
 import pytest
 
 from bot.validators import (
-    validate_leaderboard_metric,
     validate_platform,
-    validate_profile_view,
+    validate_profile_visibility,
 )
 
 
@@ -18,11 +17,11 @@ def test_validate_platform_rejects_unknown_values(value):
         validate_platform(value)
 
 
-def test_validate_profile_view_defaults_to_ranked():
-    assert validate_profile_view(None) == "ranked"
-    assert validate_profile_view("Lifetime") == "lifetime"
+def test_validate_profile_visibility_defaults_to_private():
+    assert validate_profile_visibility(None) == "private"
+    assert validate_profile_visibility("PUBLIC") == "public"
 
 
-def test_validate_leaderboard_metric_rejects_unknown_metric():
+def test_validate_profile_visibility_rejects_unknown_value():
     with pytest.raises(ValueError):
-        validate_leaderboard_metric("elo")
+        validate_profile_visibility("friends-only")

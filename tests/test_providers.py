@@ -75,13 +75,14 @@ async def test_pubg_provider_parses_ranked_and_lifetime_views(respx_mock):
     )
 
     ranked = await provider.fetch_ranked_view(account)
-    lifetime = await provider.fetch_lifetime_view(account)
+    lifetime = await provider.fetch_lifetime_view(account, mode="solo")
     await provider._client.aclose()
 
     assert ranked["tier"] == "GOLD"
     assert ranked["points"] == 1500
-    assert lifetime["matches"] == 200
+    assert lifetime["matches"] == 0
     assert lifetime["recent_match_ids"] == ["match-1", "match-2"]
+    assert ranked["modes"]["squad-fpp"]["wins"] == 12
 
 
 async def test_pubg_provider_fetch_match_summary(respx_mock):
@@ -127,6 +128,94 @@ async def test_pubg_provider_fetch_match_summary(respx_mock):
     assert summary["match_id"] == "match-1"
     assert summary["placement"] == 3
     assert summary["kills"] == 5
+    assert summary["match_type"] is None
+
+
+async def test_pubg_provider_fetches_recent_match_ids_batch(respx_mock):
+    provider = PubgProvider(client=httpx.AsyncClient(), api_key="test")
+    accounts = [
+        type("Account", (), {"account_id": "acc-1", "canonical_name": "PlayerOne", "region": "steam"})(),
+        type("Account", (), {"account_id": "acc-2", "canonical_name": "PlayerTwo", "region": "steam"})(),
+    ]
+    route = respx_mock.get("https://api.pubg.com/shards/steam/players").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"id": "acc-1", "relationships": {"matches": {"data": [{"id": "match-1"}, {"id": "match-2"}]}}},
+                    {"id": "acc-2", "relationships": {"matches": {"data": [{"id": "match-3"}]}}},
+                ]
+            },
+        )
+    )
+
+    recent_ids = await provider.fetch_recent_match_ids_batch(accounts)
+    await provider._client.aclose()
+
+    assert route.calls.last.request.url.params["filter[playerIds]"] == "acc-1,acc-2"
+    assert recent_ids == {"acc-1": ["match-1", "match-2"], "acc-2": ["match-3"]}
+
+
+async def test_pubg_provider_parses_mastery_views(respx_mock):
+    provider = PubgProvider(client=httpx.AsyncClient(), api_key="test")
+    account = type("Account", (), {"account_id": "acc-1", "canonical_name": "Player", "region": "steam"})()
+
+    respx_mock.get("https://api.pubg.com/shards/steam/players/acc-1/weapon_mastery").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "attributes": {
+                        "weaponMasterySummary": {
+                            "weaponSummaries": {
+                                "Item_Weapon_AK47_C": {
+                                    "LevelCurrent": 31,
+                                    "OfficialStatsTotal": {"kills": 80, "defeats": 82, "xpTotal": 9000},
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    )
+    respx_mock.get("https://api.pubg.com/shards/steam/players/acc-1/survival_mastery").mock(
+        return_value=httpx.Response(200, json={"data": {"attributes": {"survivalMasteryLevel": 18, "totalXp": 4444, "tier": "gold"}}})
+    )
+
+    mastery = await provider.fetch_mastery_view(account)
+    await provider._client.aclose()
+
+    assert mastery["survival"]["level"] == 18
+    assert mastery["weapon"]["top_weapons"][0]["name"] == "AK47"
+
+
+async def test_pubg_provider_fetches_account_metadata(respx_mock):
+    provider = PubgProvider(client=httpx.AsyncClient(), api_key="test")
+    account = type("Account", (), {"account_id": "acc-1", "canonical_name": "Player", "region": "steam"})()
+    respx_mock.get("https://api.pubg.com/shards/steam/players/acc-1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "id": "acc-1",
+                    "attributes": {
+                        "name": "Player",
+                        "titleId": "pubg",
+                        "shardId": "steam",
+                        "createdAt": "2024-01-01T00:00:00Z",
+                        "updatedAt": "2026-04-29T00:00:00Z",
+                    },
+                }
+            },
+        )
+    )
+
+    metadata = await provider.fetch_account_metadata(account)
+    await provider._client.aclose()
+
+    assert metadata["account_id"] == "acc-1"
+    assert metadata["title_id"] == "pubg"
 
 
 async def test_pubg_provider_rejects_missing_account_id_in_lookup(respx_mock):
