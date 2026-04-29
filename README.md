@@ -5,9 +5,9 @@ Private Discord bot for PUBG account linking, profile lookup, leaderboard views,
 ## Features
 
 - PUBG-only slash commands for linking, unlinking, direct lookup, overview profiles, compare, leaderboard, and admin link override.
-- SQLite persistence for linked accounts, cached profile views, season state, match cursors, match summaries, and stat snapshots.
-- Async PUBG provider with season cache, overview aggregation, mastery fetches, and lightweight recent-match summary parsing.
-- Lightweight cache/throttle tuned for a private server with fewer than 10 members.
+- SQLite persistence for linked accounts, source caches, season state, match cursors, match summaries, and stat snapshots.
+- Async PUBG provider with centralized GET throttling, season cache, overview aggregation, and mastery fetches.
+- Background 5-minute match warmer keeps recent summaries fresh so warmed `/profile` recent data and `/leaderboard` activity reads come from SQLite instead of repeated request-path match polling.
 
 ## Setup
 
@@ -50,7 +50,7 @@ The bot registers commands to `DISCORD_GUILD_ID` only.
 
 `/profile` now returns one interactive embed with `All`, `Recent`, and `Rank` buttons. `All` focuses on lifetime stats, `Recent` shows the 20-game window, and `Rank` isolates current ranked stats.
 `/compare` now returns one private embed with `All`, `Recent`, and `Rank` buttons. Each metric renders as a horizontal 10-block bar plus the exact value.
-`/leaderboard` now returns one public `7D` activity leaderboard ranked by hours played, with match count shown as supporting context.
+`/leaderboard` now returns one public `7D` activity leaderboard ranked by hours played, with match count shown as supporting context. The 7-day activity window is aggregated from stored `played_at_unix` rows. Inactive linked users stay visible at the bottom with `0.0h | 0 matches`.
 
 ## Deployment
 
@@ -64,6 +64,6 @@ Bot runs anywhere Python 3.11+ and a process supervisor (systemd, Docker, superv
 - [ ] `/profile` with `visibility:public`
 - [ ] `/lookup` a public PUBG name
 - [ ] `/compare` between two linked members
-- [ ] `/leaderboard` with 3+ linked members and visible 7-day activity
+- [ ] Wait at least one warmer tick after deploy, then run `/leaderboard` with 3+ linked members and visible 7-day activity
 - [ ] `/unlink` clears account and cached views
 - [ ] `/admin link set` and `/admin link delete` enforce admin-only behavior

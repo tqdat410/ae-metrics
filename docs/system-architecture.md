@@ -23,18 +23,19 @@ Discord user
 2. Startup validates required Discord/PUBG secrets.
 3. Bot initializes SQLite and runs schema setup or legacy migration.
 4. Bot loads cogs and syncs commands to one guild.
-5. Background task prewarms the current PUBG season cache.
+5. Background tasks prewarm the current PUBG season cache and run a 5-minute match warmer.
 6. Shutdown closes tasks, HTTP client, DB, then Discord client.
 
 ## Key Components
 
 | Component | Responsibility |
 | --- | --- |
-| `bot/main.py` | Discord lifecycle, guild sync, DB init, season prewarm |
+| `bot/main.py` | Discord lifecycle, guild sync, DB init, season prewarm, warmer startup/shutdown |
 | `bot/cogs/*.py` | PUBG command handlers and visibility/permission behavior |
 | `bot/db.py` | SQLite schema setup, migration, links, cache, match state, snapshots |
+| `bot/match_warmer.py` | Periodic recent-match ingestion into SQLite |
 | `bot/providers/pubg_provider.py` | PUBG account/stats/match HTTP integration |
-| `bot/cache.py` | View-based TTL cache for ranked/lifetime/source/overview payloads |
+| `bot/cache.py` | View-based TTL cache for ranked/lifetime/source payloads |
 | `bot/permissions.py` | Admin identity check |
 | `bot/embeds.py` | Shared message and leaderboard rendering helpers |
 | `bot/profile_hub_service.py` | Overview profile assembly and source cache reuse |
@@ -49,11 +50,28 @@ Discord user
 | --- | --- |
 | `/link pubg` | Validate platform -> PUBG player lookup -> save link |
 | `/unlink` | Delete linked account and cached views |
-| `/profile` | Read linked account -> assemble cached overview payload -> one profile embed with button-switched all, recent, and rank pages |
+| `/profile` | Read linked account -> assemble cached overview payload -> prefer recent matches from SQLite -> cold-fill only if warmer data is absent -> one profile embed with button-switched all, recent, and rank pages |
 | `/lookup` | Validate platform -> provider lookup -> assemble cached overview payload -> one overview embed |
 | `/compare` | Read both links -> build overview payloads for both -> one compare embed with button-switched all, recent, and rank pages |
-| `/leaderboard` | List links -> refresh recent match IDs/summaries -> aggregate stored 7-day survival time -> sort -> public embed |
+| `/leaderboard` | List links -> aggregate stored 7-day survival time from SQLite via `played_at_unix` cutoff -> sort active users -> append inactive users -> public embed |
 | `/admin link set/delete` | Verify admin -> mutate another member link -> ephemeral result |
+
+## Match Ingestion Flow
+
+```text
+every 5 min
+  -> bot.match_warmer.tick()
+  -> list linked accounts grouped by platform
+  -> fetch recent match ids in batches of 10 accounts
+  -> fetch unseen match summaries only
+  -> INSERT OR IGNORE into match_summaries
+  -> update match_cursors.fetched_at
+
+/profile after warmer, and /leaderboard
+  -> read cached sources + match_summaries from SQLite
+  -> leaderboard stays DB-only
+  -> profile recent path only cold-fills if warmer data is missing
+```
 
 ## Persistence
 
@@ -63,13 +81,13 @@ SQLite is a single database file at `DB_PATH` or `bot.db`.
 | --- | --- |
 | `schema_migrations` | Applied schema version tracking |
 | `linked_accounts` | One primary PUBG link per Discord user |
-| `rank_cache` | Cached ranked, lifetime, source, recent, and overview payloads by `pubg_account_id + platform + view` |
+| `rank_cache` | Cached ranked, lifetime, source, recent, and profile payloads by `pubg_account_id + platform + view` |
 | `api_state` | Current season cache and small runtime state |
-| `match_cursors` | Last seen recent-match cursor data per account |
-| `match_summaries` | Normalized recent match summaries |
+| `match_cursors` | Recent-match heartbeat per account (`fetched_at`) |
+| `match_summaries` | Normalized recent match summaries with `played_at` and `played_at_unix` for numeric activity-window queries |
 | `stat_snapshots` | Daily snapshots for ranked/lifetime-derived trends |
 
-The DB layer uses one `aiosqlite` connection, WAL mode, and legacy migration with backup-before-forward-copy behavior.
+The DB layer uses one `aiosqlite` connection, WAL mode, additive schema upgrades, and legacy migration with backup-before-forward-copy behavior.
 
 ## External Integrations
 

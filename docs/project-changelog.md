@@ -28,10 +28,12 @@ Last updated: 2026-04-29
 - Admin permission helper plus admin-managed link metadata.
 - Tests for legacy migration, permission checks, cog visibility behavior, provider parsing, and cache freshness behavior.
 - Removed `/profile` and `/lookup` multi-view interaction flow in favor of one overview-only contract.
+- Fix report reference: `plans/reports/code-review-260429-2151-api-cache-storage.md`.
+- Centralized PUBG throttling inside `PubgProvider._get_json`, switched match storage to `INSERT OR IGNORE`, added `played_at_unix` schema support, and moved `/leaderboard` + `/profile` recent reads onto warmer-backed SQLite data.
 
 ### Verified
 
-- `.venv\Scripts\python.exe -m pytest -q` passed `44/44`.
+- `.venv\Scripts\python.exe -m pytest -q` passed `53/53`.
 - `.venv\Scripts\python.exe -m compileall bot tests` passed.
 - Local compile/import checks passed.
 
@@ -39,5 +41,5 @@ Last updated: 2026-04-29
 
 - No live Discord smoke test completed yet.
 - No live PUBG API smoke test completed yet.
-- Coverage remains weakest in `bot/cogs/stats_cog.py`, `bot/cogs/leaderboard_cog.py`, `bot/embeds.py`, and `bot/main.py`.
+- Coverage remains weakest in `bot/main.py`, interaction views, and some live-upstream fallback paths.
 - Deployment guide still needs full PUBG-only runbook cleanup.

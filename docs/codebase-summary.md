@@ -10,10 +10,11 @@ AE Metrics is a private Discord slash-command bot for PUBG account linking, prof
 
 | Path | Purpose |
 | --- | --- |
-| `bot/main.py` | Creates bot class, initializes DB, loads cogs, syncs guild commands, starts season prewarm |
+| `bot/main.py` | Creates bot class, initializes DB, loads cogs, syncs guild commands, starts season prewarm and match warmer |
 | `bot/config.py` | Loads `.env` settings |
 | `bot/http_client.py` | Shared lazy `httpx.AsyncClient` |
 | `bot/db.py` | SQLite connection, schema migration, CRUD helpers |
+| `bot/match_warmer.py` | Background 5-minute refresh loop for recent match summaries |
 | `bot/migrations.sql` | PUBG-only schema definition |
 
 ## Discord Commands
@@ -25,7 +26,7 @@ AE Metrics is a private Discord slash-command bot for PUBG account linking, prof
 | `/profile` | `bot/cogs/stats_cog.py` | One-embed profile view with button-switched all, recent, and rank pages |
 | `/lookup` | `bot/cogs/stats_cog.py` | Direct PUBG lookup without DB write |
 | `/compare` | `bot/cogs/stats_cog.py` | One-embed compare with button-switched all, recent, and rank pages |
-| `/leaderboard` | `bot/cogs/leaderboard_cog.py` | Public `7D` activity leaderboard ranked by hours played |
+| `/leaderboard` | `bot/cogs/leaderboard_cog.py` | Public `7D` activity leaderboard ranked by hours played from stored `played_at_unix` activity |
 | `/admin link set/delete` | `bot/cogs/admin_cog.py` | Admin-only cross-user link mutation |
 
 ## Data Model
@@ -34,33 +35,33 @@ AE Metrics is a private Discord slash-command bot for PUBG account linking, prof
 | --- | --- |
 | `schema_migrations` | Schema version history |
 | `linked_accounts` | PUBG link per Discord member |
-| `rank_cache` | Cached payloads for ranked, lifetime, source, recent, and overview views |
+| `rank_cache` | Cached payloads for ranked, lifetime, source, recent, and profile views |
 | `api_state` | Current season cache |
-| `match_cursors` | Recent-match polling state |
-| `match_summaries` | Normalized recent matches |
+| `match_cursors` | Recent-match heartbeat state |
+| `match_summaries` | Normalized recent matches with `played_at_unix` for numeric activity windows |
 | `stat_snapshots` | Daily view snapshots |
 
 ## Providers
 
 | File | External API | Responsibility |
 | --- | --- | --- |
-| `bot/providers/pubg_provider.py` | PUBG Developer API | Account lookup, current season, ranked, lifetime, recent matches, match summaries |
+| `bot/providers/pubg_provider.py` | PUBG Developer API | Account lookup, current season, ranked, lifetime, mastery, recent match ids, match summaries |
 | `bot/providers/__init__.py` | shared | Provider dataclasses, errors, factory |
 
 ## Cache And Throttle
 
 | File | Behavior |
 | --- | --- |
-| `bot/cache.py` | View-based cache for source payloads and overview assembly |
-| `bot/rate_limiter.py` | Lightweight sequential PUBG throttle |
+| `bot/cache.py` | View-based cache for source payloads and profile assembly |
+| `bot/rate_limiter.py` | Lightweight sequential PUBG throttle, enforced inside provider GETs |
 
 ## Tests And Validation
 
 | Item | Status |
 | --- | --- |
 | Compile/import | Passed locally |
-| Tests | `44/44` passing locally |
+| Tests | `53/53` passing locally |
 | Coverage | `62%` bot coverage |
 | Real Discord/API smoke | Not performed |
 
-Current tests cover validators, embeds, DB migration/CRUD, cache freshness, permission helper, selected cog behavior, and PUBG provider parsing.
+Current tests cover validators, embeds, DB migration/CRUD, purge semantics, cache freshness, warmer ticks, selected cog behavior, `/profile` recent DB reads, and PUBG provider parsing/throttling.

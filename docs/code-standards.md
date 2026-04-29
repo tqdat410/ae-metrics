@@ -35,7 +35,7 @@ Last updated: 2026-04-29
 | Profile overview assembly/rendering | `bot/profile_hub_service.py`, `bot/profile_embeds.py`, `bot/profile_metrics.py` |
 | Input validation | `bot/validators.py` |
 | Permissions | `bot/permissions.py` |
-| Cache and throttling | `bot/cache.py`, `bot/rate_limiter.py` |
+| Cache and throttling | `bot/cache.py`, `bot/rate_limiter.py`, `bot/match_warmer.py` |
 | Deployment | `deploy/*` |
 | Tests | `tests/*.py` |
 
@@ -62,6 +62,7 @@ The settings layer checks required Discord/PUBG secrets before startup.
 - Use the shared HTTP response handler for error mapping.
 - Keep credentials read from settings, not hard-coded.
 - URL-encode user-controlled path segments.
+- Route every PUBG GET through `PubgProvider._get_json`; do not add per-call-site throttles.
 
 ## Discord Command Standards
 
@@ -76,4 +77,4 @@ The settings layer checks required Discord/PUBG secrets before startup.
 - Use `pytest` with `pytest-asyncio`.
 - Test validators, DB helpers, migration behavior, cache freshness, embeds, provider parsing, permission checks, and critical cog behavior.
 - Prefer mocked HTTP for provider tests.
-- Current status: `44/44` passing, `62%` bot coverage.
+- Current status: `53/53` passing locally.

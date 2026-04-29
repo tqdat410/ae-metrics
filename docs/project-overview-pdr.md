@@ -44,7 +44,7 @@ AE Metrics is a private Discord PUBG stats bot for a small server. It lets membe
 
 | Check | Status |
 | --- | --- |
-| Automated tests | Passed `44/44` |
+| Automated tests | Passed `53/53` |
 | Coverage | `62%` bot coverage |
 | Real Discord smoke | Not done |
 | Real PUBG API smoke | Not done |
