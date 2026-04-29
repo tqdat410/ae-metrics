@@ -8,82 +8,91 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot import cache, db
-from bot.embeds import make_message_embed, tier_weight
+from bot.embeds import make_leaderboard_embed, make_message_embed, tier_weight
 from bot.providers import get_provider
 from bot.rate_limiter import throttle
-from bot.validators import validate_game
+from bot.validators import LEADERBOARD_METRICS, validate_leaderboard_metric
 
-GAME_CHOICES = [
-    app_commands.Choice(name="League of Legends", value="lol"),
-    app_commands.Choice(name="Valorant", value="valo"),
-    app_commands.Choice(name="PUBG", value="pubg"),
-]
 LOGGER = logging.getLogger(__name__)
+METRIC_CHOICES = [app_commands.Choice(name=value, value=value) for value in LEADERBOARD_METRICS]
 
 
-def _account_from_link(link: dict):
+def _account_from_link(link: dict) -> SimpleNamespace:
     return SimpleNamespace(
-        puuid=link.get("puuid"),
-        summoner_id=link.get("summoner_id"),
-        account_id=link.get("account_id"),
-        canonical_name=link.get("game_name"),
-        tag_line=link.get("tag_line"),
-        region=link.get("region"),
+        account_id=link["pubg_account_id"],
+        canonical_name=link["canonical_name"],
+        region=link["platform"],
     )
-
-
-def _read(obj, name: str, default=None):
-    return obj.get(name, default) if isinstance(obj, dict) else getattr(obj, name, default)
 
 
 class LeaderboardCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.provider = get_provider()
 
-    @app_commands.command(name="leaderboard", description="Show linked members ranked for a game")
-    @app_commands.choices(game=GAME_CHOICES)
-    async def leaderboard(self, interaction: discord.Interaction, game: str) -> None:
+    @app_commands.command(name="leaderboard", description="Show the PUBG leaderboard for linked members")
+    @app_commands.choices(metric=METRIC_CHOICES)
+    async def leaderboard(self, interaction: discord.Interaction, metric: str = "rank_points") -> None:
         await interaction.response.defer()
         try:
-            game = validate_game(game)
-            rows = await db.list_links_by_game(game)
+            metric = validate_leaderboard_metric(metric)
+            rows = await db.list_pubg_links()
             if not rows:
-                await interaction.followup.send(embed=make_message_embed("Leaderboard", f"No `{game}` links yet."))
+                await interaction.followup.send(embed=make_message_embed("Leaderboard", "No PUBG links yet."))
                 return
-            entries = await self._entries(game, rows[:10])
-            embed = discord.Embed(title=f"{game.upper()} leaderboard", color=0x2563EB)
-            embed.description = "\n".join(entries) if entries else "No ranks available right now."
-            await interaction.followup.send(embed=embed)
+            entries = await self._entries(metric, rows[:10])
+            await interaction.followup.send(embed=make_leaderboard_embed(metric, entries))
         except Exception:
-            LOGGER.exception("Leaderboard failed for game %s", game)
+            LOGGER.exception("Leaderboard failed")
             await interaction.followup.send(
-                embed=make_message_embed("Leaderboard failed", "Could not build leaderboard right now.", color=0xDC2626)
+                embed=make_message_embed("Leaderboard failed", "Could not build the PUBG leaderboard right now.", color=0xDC2626)
             )
 
-    async def _entries(self, game: str, rows: list[dict]) -> list[str]:
-        provider = get_provider(game)
+    async def _entries(self, metric: str, rows: list[dict]) -> list[str]:
         ranked = []
         for row in rows:
             account = _account_from_link(row)
             try:
-                await throttle(game)
-                rank = await cache.get_or_fetch_rank(row["discord_id"], game, account, provider)
-                ranked.append((tier_weight(_read(rank, "tier"), _read(rank, "division"), _read(rank, "points")), row, rank))
+                payload = await self._metric_payload(account, metric)
+                ranked.append((self._metric_score(metric, payload), row, payload))
             except Exception:
-                LOGGER.exception("Skipping leaderboard row for discord_id=%s game=%s", row.get("discord_id"), game)
+                LOGGER.exception("Skipping leaderboard row for discord_user_id=%s", row.get("discord_user_id"))
                 continue
         ranked.sort(key=lambda item: item[0], reverse=True)
-        return [self._line(index, row, rank) for index, (_, row, rank) in enumerate(ranked, start=1)]
+        return [self._line(index, row, metric, payload) for index, (_, row, payload) in enumerate(ranked, start=1)]
 
-    def _line(self, index: int, row: dict, rank) -> str:
-        tag = f"#{row['tag_line']}" if row.get("tag_line") else ""
-        tier = _read(rank, "tier") or "Unranked"
-        division = _read(rank, "division")
-        points = _read(rank, "points")
-        score = f"{tier}{f' {division}' if division else ''}"
-        if points is not None:
-            score += f" - {points} pts"
-        return f"**{index}.** <@{row['discord_id']}> - `{row['game_name']}{tag}` - {score}"
+    async def _metric_payload(self, account: SimpleNamespace, metric: str) -> dict:
+        view = "lifetime" if metric in {"kd", "damage"} else "ranked"
+        fetcher = self.provider.fetch_lifetime_view if view == "lifetime" else self.provider.fetch_ranked_view
+        await throttle(f"pubg_{metric}")
+        payload, _ = await cache.get_or_fetch_view(account.account_id, account.region, view, lambda: fetcher(account))
+        return payload
+
+    def _metric_score(self, metric: str, payload: dict) -> float:
+        if metric == "rank_points":
+            return float(tier_weight(payload.get("tier"), payload.get("division"), payload.get("points")))
+        if metric == "wins":
+            return float(payload.get("wins") or 0)
+        if metric == "kd":
+            return float(payload.get("kd") or 0)
+        if metric == "damage":
+            return float(payload.get("damage") or 0)
+        return 0.0
+
+    def _line(self, index: int, row: dict, metric: str, payload: dict) -> str:
+        if metric == "rank_points":
+            tier = payload.get("tier") or "Unranked"
+            division = payload.get("division")
+            value = f"{tier}{f' {division}' if division else ''}"
+            if payload.get("points") is not None:
+                value += f" - {payload['points']} pts"
+        elif metric == "wins":
+            value = f"{payload.get('wins') or 0} wins"
+        elif metric == "kd":
+            value = f"{float(payload.get('kd') or 0):.2f} K/D"
+        else:
+            value = f"{int(payload.get('damage') or 0)} damage"
+        return f"**{index}.** <@{row['discord_user_id']}> - `{row['canonical_name']}` - {value}"
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -1,6 +1,6 @@
 # Code Standards
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 ## Project Principles
 
@@ -19,7 +19,7 @@ Last updated: 2026-04-28
 | Imports | Standard library, third-party, local imports grouped in that order |
 | Naming | Python modules use existing snake_case convention |
 | Errors | Raise provider-specific exceptions for upstream/API failures |
-| Comments | Add only when code intent is not obvious |
+| Comments | Add only when intent is not obvious |
 
 ## Module Boundaries
 
@@ -29,10 +29,11 @@ Last updated: 2026-04-28
 | Settings | `bot/config.py` |
 | Persistence | `bot/db.py`, `bot/migrations.sql` |
 | Discord commands | `bot/cogs/*.py` |
-| API providers | `bot/providers/*.py` |
+| PUBG provider | `bot/providers/*.py` |
 | Shared provider contracts | `bot/providers/__init__.py` |
-| Embed rendering and ranking weight | `bot/embeds.py` |
+| Embed rendering and metric formatting | `bot/embeds.py` |
 | Input validation | `bot/validators.py` |
+| Permissions | `bot/permissions.py` |
 | Cache and throttling | `bot/cache.py`, `bot/rate_limiter.py` |
 | Deployment | `deploy/*` |
 | Tests | `tests/*.py` |
@@ -45,19 +46,17 @@ Documented env vars in `.env.example`:
 | --- | --- | --- |
 | `DISCORD_TOKEN` | Yes | Discord bot token |
 | `DISCORD_GUILD_ID` | Yes | Guild-scoped slash command sync |
-| `RIOT_API_KEY` | Yes | Riot dev key |
-| `HENRIK_API_KEY` | Yes | HenrikDev API key |
 | `PUBG_API_KEY` | Yes | PUBG API key |
 | `DB_PATH` | No | Defaults to `bot.db` |
 | `LOG_LEVEL` | No | Defaults to INFO |
-| `ADMIN_DISCORD_ID` | No | Enables admin-only key reload and DM warnings |
+| `ADMIN_DISCORD_ID` | No | Optional explicit admin override id |
 
-The settings layer checks required API secrets before bot startup.
+The settings layer checks required Discord/PUBG secrets before startup.
 
 ## Provider Standards
 
 - Return the shared account dataclass from account lookup.
-- Return the shared rank dataclass from rank fetch.
+- Keep PUBG responses normalized before cogs render them.
 - Use shared `http_client.get_client()` unless tests inject a client.
 - Use the shared HTTP response handler for error mapping.
 - Keep credentials read from settings, not hard-coded.
@@ -66,15 +65,14 @@ The settings layer checks required API secrets before bot startup.
 ## Discord Command Standards
 
 - Defer interactions before provider or DB work.
-- Use ephemeral responses for account linking, rank lookup, lookup failures, and admin actions.
+- Use ephemeral responses for link, unlink, profile, lookup, compare, matches, and admin actions.
 - Use public response for leaderboard.
 - Convert provider exceptions into user-safe messages.
-- Keep command files focused by feature group.
+- Gate cross-user mutations in the command layer before DB writes.
 
 ## Test Standards
 
-- Use `pytest` with `pytest-asyncio` auto mode from `pytest.ini`.
-- Test validators, DB helpers, cache behavior, rank sorting, provider error mapping, and critical provider parsing.
+- Use `pytest` with `pytest-asyncio`.
+- Test validators, DB helpers, migration behavior, cache freshness, embeds, provider parsing, permission checks, and critical cog behavior.
 - Prefer mocked HTTP for provider tests.
-- Current status: 22/22 tests passed, 31% coverage per task context.
-- Next priority: raise provider and cog coverage before adding commands.
+- Current status: `27/27` passing, `62%` bot coverage.

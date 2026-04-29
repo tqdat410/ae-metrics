@@ -1,43 +1,42 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from bot import db
 
-CACHE_TTL = {"lol": 900, "valo": 900, "pubg": 1800}
+CACHE_TTL = {
+    "ranked": 30 * 60,
+    "lifetime": 60 * 60,
+    "recent_matches": 15 * 60,
+}
 
 
-class RankProvider(Protocol):
-    async def fetch_rank(self, account: Any) -> Any: ...
+def _payload(value: Any) -> dict[str, Any]:
+    if hasattr(value, "to_dict"):
+        return value.to_dict()
+    if hasattr(value, "__dict__"):
+        return dict(value.__dict__)
+    return dict(value)
 
 
-def _rank_from_payload(payload: dict[str, Any], provider: RankProvider | None = None) -> Any:
-    rank_type = getattr(provider, "RankInfo", None)
-    if rank_type:
-        return rank_type(**payload)
-    return payload
-
-
-def _rank_payload(rank: Any) -> dict[str, Any]:
-    if hasattr(rank, "to_dict"):
-        return rank.to_dict()
-    if hasattr(rank, "__dict__"):
-        return dict(rank.__dict__)
-    return dict(rank)
-
-
-async def get_or_fetch_rank(discord_id: int, game: str, account: Any, provider: RankProvider) -> Any:
-    cached = await db.get_cache(discord_id, game)
-    ttl = CACHE_TTL.get(game, 900)
+async def get_or_fetch_view(
+    pubg_account_id: str,
+    platform: str,
+    view: str,
+    fetcher: Callable[[], Awaitable[dict[str, Any]]],
+) -> tuple[dict[str, Any], bool]:
+    cached = await db.get_cache(pubg_account_id, platform, view)
+    ttl = CACHE_TTL.get(view, 15 * 60)
     if cached:
         payload, age = cached
         if age < ttl:
-            return _rank_from_payload(payload, provider)
+            return payload, False
 
-    rank = await provider.fetch_rank(account)
-    await db.set_cache(discord_id, game, _rank_payload(rank))
-    return rank
+    payload = _payload(await fetcher())
+    await db.set_cache(pubg_account_id, platform, view, payload)
+    return payload, True
 
 
-async def invalidate(discord_id: int, game: str) -> None:
-    await db.delete_cache(discord_id, game)
+async def invalidate(pubg_account_id: str, platform: str, view: str | None = None) -> None:
+    await db.delete_cache(pubg_account_id, platform, view)

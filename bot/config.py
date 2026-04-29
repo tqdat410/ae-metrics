@@ -9,8 +9,6 @@ class Settings(BaseSettings):
 
     discord_token: str = Field(alias="DISCORD_TOKEN")
     discord_guild_id: int = Field(alias="DISCORD_GUILD_ID")
-    riot_api_key: str = Field(alias="RIOT_API_KEY")
-    henrik_api_key: str = Field(alias="HENRIK_API_KEY")
     pubg_api_key: str = Field(alias="PUBG_API_KEY")
     db_path: str = Field(default="bot.db", alias="DB_PATH")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
@@ -21,8 +19,6 @@ class Settings(BaseSettings):
             name
             for name, value in {
                 "DISCORD_TOKEN": self.discord_token,
-                "RIOT_API_KEY": self.riot_api_key,
-                "HENRIK_API_KEY": self.henrik_api_key,
                 "PUBG_API_KEY": self.pubg_api_key,
             }.items()
             if not value.strip()
@@ -34,4 +30,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

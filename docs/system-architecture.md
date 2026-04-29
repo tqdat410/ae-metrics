@@ -1,96 +1,82 @@
 # System Architecture
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 ## Architecture Summary
 
-AE Metrics is a single-process async Discord bot. Discord slash commands call feature cogs, cogs use SQLite for linked accounts and cache, and providers fetch rank data from external game APIs.
+AE Metrics is a single-process async Discord bot focused only on PUBG. Discord slash commands call PUBG-specific cogs, cogs use SQLite for identity/cache/analytics state, and the PUBG provider fetches account, season, ranked, lifetime, and match data.
 
 ```text
 Discord user
   -> Guild slash command
   -> GameStatsBot
   -> Cog handler
-  -> Validators / DB / Cache
-  -> Game provider
-  -> External API
+  -> Permission / Validation / DB / Cache
+  -> PUBG provider
+  -> PUBG API
   -> Discord embed response
 ```
 
 ## Runtime Flow
 
-1. The module entry point runs the async bot startup.
-2. Settings load from `.env` through the settings helper.
-3. Required secret validation fails startup if required API secrets are blank.
-4. Logging writes to stdout and `bot.log`.
-5. Bot setup initializes SQLite, loads all cogs, syncs commands to one guild, and starts background tasks.
-6. Shutdown closes background tasks, HTTP client, DB connection, then Discord client.
+1. `bot.main` loads settings from `.env`.
+2. Startup validates required Discord/PUBG secrets.
+3. Bot initializes SQLite and runs schema setup or legacy migration.
+4. Bot loads cogs and syncs commands to one guild.
+5. Background task prewarms the current PUBG season cache.
+6. Shutdown closes tasks, HTTP client, DB, then Discord client.
 
 ## Key Components
 
 | Component | Responsibility |
 | --- | --- |
-| Bot class | Discord lifecycle, cog loading, command sync, cleanup |
-| Cogs | Slash command handlers and user-facing error messages |
-| DB layer | SQLite migrations, links, cache, state |
-| Providers | LoL, Valorant, and PUBG HTTP integration |
-| Cache | Game-specific rank TTL |
-| Rate limiter | Lightweight sequential throttle |
-| Key monitor | Riot key age warning and reload timestamp |
+| `bot/main.py` | Discord lifecycle, guild sync, DB init, season prewarm |
+| `bot/cogs/*.py` | PUBG command handlers and visibility/permission behavior |
+| `bot/db.py` | SQLite schema setup, migration, links, cache, match state, snapshots |
+| `bot/providers/pubg_provider.py` | PUBG account/stats/match HTTP integration |
+| `bot/cache.py` | View-based TTL cache for ranked/lifetime/matches |
+| `bot/permissions.py` | Admin identity check |
+| `bot/embeds.py` | PUBG profile/compare/leaderboard/matches rendering |
 
 ## Data Flow By Command
 
 | Command | Flow |
 | --- | --- |
-| `/link lol` | Parse Riot ID -> validate region -> Riot lookup -> save link |
-| `/link valo` | Parse Riot ID -> validate region -> Henrik lookup -> save link |
 | `/link pubg` | Validate platform -> PUBG player lookup -> save link |
-| `/rank` | Read linked account -> cache hit or provider fetch -> embed |
-| `/lookup` | Validate input -> provider lookup -> provider rank fetch -> embed, no DB write |
-| `/leaderboard` | List links -> throttle/cache/fetch each -> sort by rank weight -> embed |
-| `/admin reload-key` | Verify admin -> read `.env` -> update process env/settings -> mark timestamp |
+| `/unlink` | Delete linked account and cached views |
+| `/profile` | Read linked account -> cache hit or provider fetch -> embed |
+| `/lookup` | Validate platform/view -> provider lookup -> cached/fresh view fetch -> embed |
+| `/compare` | Read both links -> fetch comparable view for each -> compare embed |
+| `/leaderboard` | List links -> fetch chosen metric view per member -> sort -> public embed |
+| `/matches` | Read link -> fetch recent match IDs -> persist unseen summaries -> embed |
+| `/admin link set/delete` | Verify admin -> mutate another member link -> ephemeral result |
 
 ## Persistence
 
 SQLite is a single database file at `DB_PATH` or `bot.db`.
 
-| Table | Writes |
+| Table | Purpose |
 | --- | --- |
-| `linked_accounts` | `/link`, `/unlink` |
-| `rank_cache` | `/rank`, `/leaderboard`, cache invalidation |
-| `api_state` | Riot key timestamp, PUBG season cache |
+| `schema_migrations` | Applied schema version tracking |
+| `linked_accounts` | One primary PUBG link per Discord user |
+| `rank_cache` | Cached view payloads by `pubg_account_id + platform + view` |
+| `api_state` | Current season cache and small runtime state |
+| `match_cursors` | Last seen recent-match cursor data per account |
+| `match_summaries` | Normalized recent match summaries |
+| `stat_snapshots` | Daily snapshots for ranked/lifetime-derived trends |
 
-The DB module uses one `aiosqlite` connection for the process, WAL mode, and committed writes per helper.
+The DB layer uses one `aiosqlite` connection, WAL mode, and legacy migration with backup-before-forward-copy behavior.
 
 ## External Integrations
 
 | Integration | Auth | Main use |
 | --- | --- | --- |
 | Discord | `DISCORD_TOKEN` | Slash command runtime |
-| Riot API | `X-Riot-Token` | LoL account, summoner, ranked queue data |
-| HenrikDev | Authorization header | Valorant account and MMR data |
-| PUBG API | Bearer authorization header | PUBG player, seasons, ranked stats |
-
-## Deployment Architecture
-
-Deployment files target Ubuntu on Oracle Cloud Free ARM:
-
-```text
-/opt/discord-bot/
-  bot/
-  .venv/
-  .env
-  bot.db
-/etc/systemd/system/discord-bot.service
-/etc/logrotate.d/discord-bot
-/var/log/discord-bot/bot.log
-```
-
-`deploy/install.sh` installs Python 3.11, creates the venv, installs requirements, registers the service, and enables it. `deploy/update.sh` pulls latest code, reinstalls requirements, restarts the service, and prints service status.
+| PUBG API | Bearer authorization header | Account lookup, seasons, ranked, lifetime, matches |
 
 ## Operational Gaps
 
-- No real Discord smoke test recorded.
-- No real external API smoke test recorded.
-- Coverage is 31%, below the testing plan target.
-- PUBG season prewarm currently covers only `steam` on startup.
+- Real Discord smoke is still missing.
+- Real PUBG API smoke is still missing.
+- Coverage is improved but still incomplete in `StatsCog` and startup paths.
+- Deployment docs still need full PUBG-only operator cleanup.

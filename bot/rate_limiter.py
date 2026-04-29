@@ -4,7 +4,7 @@ import asyncio
 import time
 from collections import defaultdict
 
-INTERVALS = {"pubg": 6.0, "lol": 0.1, "valo": 0.1}
+INTERVALS = {"pubg": 6.0}
 
 _locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 _last_seen: dict[str, float] = defaultdict(float)

@@ -7,6 +7,5 @@ def test_tier_weight_orders_divisions_and_points():
 
 
 def test_tier_weight_orders_top_tiers():
-    assert tier_weight("CHALLENGER", None, 1500) > tier_weight("GRANDMASTER", None, 500)
-    assert tier_weight("Radiant", None, 1) > tier_weight("Immortal 3", None, 400)
-
+    assert tier_weight("MASTER", None, 1500) > tier_weight("DIAMOND", None, 500)
+    assert tier_weight("Gold", "1", 1) > tier_weight("Gold", "3", 0)

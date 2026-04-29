@@ -1,24 +1,24 @@
 # AE Metrics
 
-Private Discord bot for game rank lookups across League of Legends, Valorant, and PUBG.
+Private Discord bot for PUBG account linking, profile lookup, leaderboard views, and lightweight match analytics in a small private server.
 
 ## Features
 
-- Slash commands for linking accounts, rank lookup, arbitrary lookup, leaderboard, and Riot dev-key reload.
-- SQLite persistence for linked accounts, rank cache, and API state.
-- Async HTTP providers for Riot, HenrikDev Valorant, and PUBG APIs.
-- Lightweight cache/throttle designed for a private server with fewer than 10 members.
+- PUBG-only slash commands for linking, unlinking, direct lookup, profile views, compare, leaderboard, admin link override, and recent matches.
+- SQLite persistence for linked accounts, cached profile views, season state, match cursors, match summaries, and stat snapshots.
+- Async PUBG provider with season cache, ranked/lifetime views, and lightweight recent-match summary parsing.
+- Lightweight cache/throttle tuned for a private server with fewer than 10 members.
 
 ## Setup
 
 ```powershell
 python -m venv .venv
-.\\.venv\\Scripts\\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Fill `.env` with Discord and game API credentials. Then run:
+Fill `.env` with Discord and PUBG credentials. Then run:
 
 ```powershell
 python -m bot.main
@@ -32,35 +32,35 @@ The bot registers commands to `DISCORD_GUILD_ID` only.
 | --- | --- | --- |
 | `DISCORD_TOKEN` | yes | Discord bot token |
 | `DISCORD_GUILD_ID` | yes | Private server ID for slash command sync |
-| `RIOT_API_KEY` | yes | 24-hour Riot development key |
-| `HENRIK_API_KEY` | yes | HenrikDev Valorant API key |
 | `PUBG_API_KEY` | yes | PUBG developer API key |
 | `DB_PATH` | no | Defaults to `bot.db` |
 | `LOG_LEVEL` | no | Defaults to `INFO` |
-| `ADMIN_DISCORD_ID` | no | Enables `/admin reload-key` |
+| `ADMIN_DISCORD_ID` | no | Optional override admin for `/admin link ...` |
 
 ## Commands
 
-- `/link lol riot_id region`
-- `/link valo riot_id region`
 - `/link pubg name platform`
-- `/unlink game`
-- `/rank game user`
-- `/lookup game player region`
-- `/leaderboard game`
-- `/admin reload-key`
+- `/unlink`
+- `/profile [user] [view]`
+- `/lookup name [platform] [view]`
+- `/compare user_a user_b [view]`
+- `/leaderboard [metric]`
+- `/matches [user] [count]`
+- `/admin link set user name platform`
+- `/admin link delete user`
 
 ## Deployment
 
-Bot runs anywhere Python 3.11+ and a process supervisor (systemd, Docker, supervisord, pm2) are available. See [`docs/deployment-guide.md`](docs/deployment-guide.md) for generic steps and a systemd unit template.
-
-Riot development keys expire every 24 hours. Preferred renewal: edit `RIOT_API_KEY` in `.env`, then run `/admin reload-key` in Discord. Fallback: restart the service.
+Bot runs anywhere Python 3.11+ and a process supervisor (systemd, Docker, supervisord, pm2) are available. See [`docs/deployment-guide.md`](docs/deployment-guide.md) for generic steps and adapt it to the PUBG-only env set above.
 
 ## Manual Smoke Test
 
-- [ ] `/link lol` with a real account
-- [ ] `/rank` self
-- [ ] `/rank` another linked member
-- [ ] `/lookup` a public Riot ID
+- [ ] `/link pubg` with a real PUBG account
+- [ ] `/profile` self with `ranked`
+- [ ] `/profile` another linked member with `lifetime`
+- [ ] `/lookup` a public PUBG name
+- [ ] `/compare` between two linked members
 - [ ] `/leaderboard` with 3+ linked members
-- [ ] `/unlink` clears account and cache
+- [ ] `/matches` returns recent summaries
+- [ ] `/unlink` clears account and cached views
+- [ ] `/admin link set` and `/admin link delete` enforce admin-only behavior

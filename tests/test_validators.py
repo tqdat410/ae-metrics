@@ -1,24 +1,28 @@
 import pytest
 
-from bot.validators import parse_riot_id, validate_game, validate_region
+from bot.validators import (
+    validate_leaderboard_metric,
+    validate_platform,
+    validate_profile_view,
+)
 
 
-def test_parse_riot_id_accepts_valid_name_tag():
-    assert parse_riot_id("Faker#KR1") == ("Faker", "KR1")
-    assert parse_riot_id("Hide on bush#KR1") == ("Hide on bush", "KR1")
+def test_validate_platform_defaults_to_steam():
+    assert validate_platform(None) == "steam"
+    assert validate_platform("PSN") == "psn"
 
 
-@pytest.mark.parametrize("value", ["NoTag", "A#1", "This Name Is Too Long#VN2", "Name#TOOLONG", "   #VN2"])
-def test_parse_riot_id_rejects_invalid_values(value):
+@pytest.mark.parametrize("value", ["stadia", " pc "])
+def test_validate_platform_rejects_unknown_values(value):
     with pytest.raises(ValueError):
-        parse_riot_id(value)
+        validate_platform(value)
 
 
-def test_validate_game_and_region_defaults():
-    assert validate_game("LoL") == "lol"
-    assert validate_region("valo", None) == "ap"
+def test_validate_profile_view_defaults_to_ranked():
+    assert validate_profile_view(None) == "ranked"
+    assert validate_profile_view("Lifetime") == "lifetime"
 
 
-def test_validate_region_rejects_unknown_region():
+def test_validate_leaderboard_metric_rejects_unknown_metric():
     with pytest.raises(ValueError):
-        validate_region("pubg", "stadia")
+        validate_leaderboard_metric("elo")

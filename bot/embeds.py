@@ -5,52 +5,26 @@ from typing import Any
 import discord
 
 TIER_COLORS = {
-    "IRON": 0x6B7280,
+    "UNRANKED": 0x64748B,
     "BRONZE": 0xA16207,
     "SILVER": 0x94A3B8,
     "GOLD": 0xF59E0B,
     "PLATINUM": 0x14B8A6,
-    "EMERALD": 0x10B981,
     "DIAMOND": 0x60A5FA,
     "MASTER": 0xA855F7,
-    "GRANDMASTER": 0xEF4444,
-    "CHALLENGER": 0xFACC15,
-    "IMMORTAL": 0xDC2626,
-    "RADIANT": 0xFDE68A,
-    "UNRANKED": 0x64748B,
 }
 
 TIER_ORDER = {
     "UNRANKED": 0,
-    "IRON": 1000,
     "BRONZE": 2000,
     "SILVER": 3000,
     "GOLD": 4000,
     "PLATINUM": 5000,
-    "EMERALD": 6000,
     "DIAMOND": 7000,
     "MASTER": 8000,
-    "IMMORTAL": 8500,
-    "GRANDMASTER": 9000,
-    "RADIANT": 9500,
-    "CHALLENGER": 10000,
 }
 
-DIVISION_WEIGHT = {"IV": 1, "III": 2, "II": 3, "I": 4, "4": 1, "3": 2, "2": 3, "1": 4}
-
-
-def _read(obj: Any, name: str, default: Any = None) -> Any:
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-    return getattr(obj, name, default)
-
-
-def rank_to_dict(rank: Any) -> dict[str, Any]:
-    if hasattr(rank, "to_dict"):
-        return rank.to_dict()
-    if hasattr(rank, "__dict__"):
-        return dict(rank.__dict__)
-    return dict(rank)
+DIVISION_WEIGHT = {"5": 1, "4": 1, "III": 2, "3": 2, "II": 3, "2": 3, "I": 4, "1": 4}
 
 
 def tier_key(tier: str | None) -> str:
@@ -64,32 +38,99 @@ def tier_weight(tier: str | None, division: str | None = None, points: int | Non
     return base + div * 100 + max(points or 0, 0)
 
 
-def make_rank_embed(game: str, account: Any, rank: Any) -> discord.Embed:
-    tier = _read(rank, "tier") or "Unranked"
-    division = _read(rank, "division")
-    points = _read(rank, "points")
-    wins = _read(rank, "wins")
-    losses = _read(rank, "losses")
-    name = _read(account, "canonical_name") or _read(account, "game_name") or "Unknown"
-    tag = _read(account, "tag_line")
-    region = _read(account, "region", "unknown")
-    display = f"{name}#{tag}" if tag else name
+def make_message_embed(title: str, message: str, *, color: int = 0x2563EB) -> discord.Embed:
+    return discord.Embed(title=title, description=message, color=color)
 
-    title = f"{game.upper()} rank: {display}"
-    description = f"**{tier}{f' {division}' if division else ''}**"
-    if points is not None:
-        description += f" - {points} pts"
 
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=TIER_COLORS.get(tier_key(tier), TIER_COLORS["UNRANKED"]),
-    )
-    embed.add_field(name="Region", value=str(region), inline=True)
-    if wins is not None or losses is not None:
-        embed.add_field(name="Record", value=f"{wins or 0}W / {losses or 0}L", inline=True)
+def make_profile_embed(account: Any, view: str, payload: dict[str, Any]) -> discord.Embed:
+    name = getattr(account, "canonical_name", None) or payload.get("canonical_name") or "Unknown"
+    platform = getattr(account, "region", None) or payload.get("platform") or "unknown"
+
+    if view == "ranked":
+        tier = payload.get("tier") or "Unranked"
+        division = payload.get("division")
+        title = f"PUBG ranked: {name}"
+        description = f"**{tier}{f' {division}' if division else ''}**"
+        if payload.get("points") is not None:
+            description += f" - {payload['points']} pts"
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=TIER_COLORS.get(tier_key(tier), TIER_COLORS["UNRANKED"]),
+        )
+        embed.add_field(name="Mode", value=str(payload.get("mode") or "n/a"), inline=True)
+        embed.add_field(name="Matches", value=str(payload.get("matches") or 0), inline=True)
+        embed.add_field(name="Wins", value=str(payload.get("wins") or 0), inline=True)
+        embed.add_field(name="K/D", value=_metric_text(payload.get("kd")), inline=True)
+        embed.add_field(name="Damage", value=_metric_text(payload.get("damage"), digits=0), inline=True)
+        embed.add_field(name="Platform", value=str(platform), inline=True)
+        return embed
+
+    embed = discord.Embed(title=f"PUBG lifetime: {name}", color=0x2563EB)
+    embed.description = f"Primary mode: **{payload.get('mode') or 'n/a'}**"
+    embed.add_field(name="Matches", value=str(payload.get("matches") or 0), inline=True)
+    embed.add_field(name="Wins", value=str(payload.get("wins") or 0), inline=True)
+    embed.add_field(name="Top 10", value=str(payload.get("top10s") or 0), inline=True)
+    embed.add_field(name="K/D", value=_metric_text(payload.get("kd")), inline=True)
+    embed.add_field(name="Damage", value=_metric_text(payload.get("damage"), digits=0), inline=True)
+    embed.add_field(name="Headshots", value=str(payload.get("headshots") or 0), inline=True)
+    embed.add_field(name="Assists", value=str(payload.get("assists") or 0), inline=True)
+    embed.add_field(name="Revives", value=str(payload.get("revives") or 0), inline=True)
+    embed.add_field(name="Platform", value=str(platform), inline=True)
     return embed
 
 
-def make_message_embed(title: str, message: str, *, color: int = 0x2563EB) -> discord.Embed:
-    return discord.Embed(title=title, description=message, color=color)
+def make_compare_embed(view: str, left_member: str, right_member: str, left: dict[str, Any], right: dict[str, Any]) -> discord.Embed:
+    embed = discord.Embed(title=f"PUBG compare: {left_member} vs {right_member}", color=0x2563EB)
+    fields = _compare_fields(view, left, right)
+    for label, left_value, right_value in fields:
+        embed.add_field(name=label, value=f"{left_value}\nvs\n{right_value}", inline=True)
+    return embed
+
+
+def make_leaderboard_embed(metric: str, rows: list[str]) -> discord.Embed:
+    embed = discord.Embed(title=f"PUBG leaderboard: {metric}", color=0x2563EB)
+    embed.description = "\n".join(rows) if rows else "No leaderboard data available right now."
+    return embed
+
+
+def make_matches_embed(name: str, matches: list[dict[str, Any]]) -> discord.Embed:
+    embed = discord.Embed(title=f"PUBG recent matches: {name}", color=0x2563EB)
+    lines = []
+    for match in matches:
+        lines.append(
+            f"`{match.get('game_mode', 'unknown')}` place **#{match.get('placement', '?')}** "
+            f"- {match.get('kills', 0)} kills - {int(match.get('damage') or 0)} dmg"
+        )
+    embed.description = "\n".join(lines) if lines else "No recent matches available."
+    return embed
+
+
+def _metric_text(value: Any, *, digits: int = 2) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, float):
+        return f"{value:.{digits}f}"
+    return str(value)
+
+
+def _compare_fields(view: str, left: dict[str, Any], right: dict[str, Any]) -> list[tuple[str, str, str]]:
+    if view == "ranked":
+        return [
+            ("Tier", _rank_label(left), _rank_label(right)),
+            ("Points", _metric_text(left.get("points"), digits=0), _metric_text(right.get("points"), digits=0)),
+            ("Wins", _metric_text(left.get("wins"), digits=0), _metric_text(right.get("wins"), digits=0)),
+            ("K/D", _metric_text(left.get("kd")), _metric_text(right.get("kd"))),
+        ]
+    return [
+        ("Matches", _metric_text(left.get("matches"), digits=0), _metric_text(right.get("matches"), digits=0)),
+        ("Wins", _metric_text(left.get("wins"), digits=0), _metric_text(right.get("wins"), digits=0)),
+        ("K/D", _metric_text(left.get("kd")), _metric_text(right.get("kd"))),
+        ("Damage", _metric_text(left.get("damage"), digits=0), _metric_text(right.get("damage"), digits=0)),
+    ]
+
+
+def _rank_label(payload: dict[str, Any]) -> str:
+    tier = payload.get("tier") or "Unranked"
+    division = payload.get("division")
+    return f"{tier}{f' {division}' if division else ''}"

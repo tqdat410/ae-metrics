@@ -35,15 +35,9 @@ class GameStatsBot(commands.Bot):
         self.tree.copy_global_to(guild=self.guild_object)
         await self.tree.sync(guild=self.guild_object)
 
-        from bot.key_monitor import monitor_loop
         from bot.providers.pubg_provider import prewarm_current_seasons
 
-        self.background_tasks.extend(
-            [
-                asyncio.create_task(monitor_loop(self), name="riot-key-monitor"),
-                asyncio.create_task(prewarm_current_seasons(["steam"]), name="pubg-season-prewarm"),
-            ]
-        )
+        self.background_tasks.append(asyncio.create_task(prewarm_current_seasons(["steam"]), name="pubg-season-prewarm"))
 
     async def _load_cogs(self) -> None:
         import bot.cogs

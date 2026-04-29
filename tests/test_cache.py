@@ -1,45 +1,32 @@
-from dataclasses import dataclass
-
 import pytest
 
 from bot import cache, db
 
 
-@dataclass
-class FakeRank:
-    tier: str
-    division: str | None
-    points: int
-    wins: int | None = None
-    losses: int | None = None
-    raw: dict | None = None
-
-
 class FakeProvider:
-    RankInfo = FakeRank
-
     def __init__(self):
         self.calls = 0
 
-    async def fetch_rank(self, account):
+    async def ranked(self):
         self.calls += 1
-        return FakeRank("GOLD", "II", 44, raw={})
+        return {"tier": "GOLD", "division": "II", "points": 44}
 
 
 @pytest.mark.usefixtures("tmp_db")
-async def test_get_or_fetch_rank_caches_result():
+async def test_get_or_fetch_view_caches_result():
     provider = FakeProvider()
-    first = await cache.get_or_fetch_rank(1, "lol", object(), provider)
-    second = await cache.get_or_fetch_rank(1, "lol", object(), provider)
+    first, first_fetched = await cache.get_or_fetch_view("account-1", "steam", "ranked", provider.ranked)
+    second, second_fetched = await cache.get_or_fetch_view("account-1", "steam", "ranked", provider.ranked)
 
-    assert first.tier == "GOLD"
-    assert second.tier == "GOLD"
+    assert first["tier"] == "GOLD"
+    assert second["points"] == 44
+    assert first_fetched is True
+    assert second_fetched is False
     assert provider.calls == 1
 
 
 @pytest.mark.usefixtures("tmp_db")
-async def test_invalidate_deletes_cache():
-    await db.set_cache(1, "lol", {"tier": "SILVER", "division": "I", "points": 1})
-    await cache.invalidate(1, "lol")
-    assert await db.get_cache(1, "lol") is None
-
+async def test_invalidate_deletes_cached_view():
+    await db.set_cache("account-1", "steam", "ranked", {"tier": "SILVER", "division": "I", "points": 1})
+    await cache.invalidate("account-1", "steam", "ranked")
+    assert await db.get_cache("account-1", "steam", "ranked") is None

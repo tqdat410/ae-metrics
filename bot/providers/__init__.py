@@ -27,7 +27,7 @@ class RankInfo:
 
 
 class ProviderError(Exception):
-    """Base class for game provider failures safe to show as bot errors."""
+    """Base class for provider failures safe to show in bot responses."""
 
 
 class NotFoundError(ProviderError):
@@ -51,7 +51,7 @@ def handle_response(response: httpx.Response, service: str) -> None:
     if status < 400:
         return
     if status == 404:
-        raise NotFoundError(f"{service} account or rank data not found")
+        raise NotFoundError(f"{service} account or stats not found")
     if status == 429:
         raise RateLimitError(f"{service} rate limit exceeded")
     if status in {401, 403}:
@@ -65,17 +65,7 @@ def upstream_error(service: str, error: httpx.RequestError) -> UpstreamError:
     return UpstreamError(f"{service} request failed: {error.__class__.__name__}")
 
 
-def get_provider(game: str):
-    if game == "lol":
-        from bot.providers.lol_provider import LolProvider
+def get_provider():
+    from bot.providers.pubg_provider import PubgProvider
 
-        return LolProvider()
-    if game == "valo":
-        from bot.providers.valorant_provider import ValorantProvider
-
-        return ValorantProvider()
-    if game == "pubg":
-        from bot.providers.pubg_provider import PubgProvider
-
-        return PubgProvider()
-    raise ValueError(f"Unsupported game: {game}")
+    return PubgProvider()

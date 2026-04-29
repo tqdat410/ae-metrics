@@ -1,32 +1,35 @@
 # Project Changelog
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
-## 2026-04-28
+## 2026-04-29
+
+### Changed
+
+- Pivoted the bot from multi-game to `PUBG-only`.
+- Replaced old command surface with `/link pubg`, `/unlink`, `/profile`, `/lookup`, `/compare`, `/leaderboard`, `/matches`, and admin link CRUD commands.
+- Reduced required runtime secrets to Discord + PUBG only.
+- Removed Riot/Valorant runtime paths, providers, and Riot key monitor flow.
 
 ### Added
 
-- Implemented private Discord Game Stats Bot for LoL, Valorant, and PUBG.
-- Added guild-scoped slash commands for linking, unlinking, rank lookup, arbitrary lookup, leaderboard, and admin Riot key reload.
-- Added Pydantic settings from `.env` with required secret validation.
-- Added SQLite schema and async DB helpers for linked accounts, rank cache, and API state.
-- Added provider layer for Riot, HenrikDev, and PUBG APIs.
-- Added shared provider dataclasses and exception mapping.
-- Added rank embeds, message embeds, and tier weighting for leaderboard sorting.
-- Added game-specific cache TTL and lightweight throttle helper.
-- Added Riot dev-key monitor and reload timestamp tracking.
-- Added Oracle/systemd deployment templates and log rotation config.
-- Added pytest suite for validators, DB, cache, embeds, and selected provider behavior.
+- Version-aware SQLite forward migration from legacy multi-game schema to PUBG-only schema.
+- WAL-safe backup creation before legacy schema migration.
+- PUBG-only link ownership model using `discord_user_id + pubg_account_id + platform`.
+- View-based cache keyed by `pubg_account_id + platform + view`.
+- Recent match cursor storage, match summary persistence, and stat snapshot storage.
+- Admin permission helper plus admin-managed link metadata.
+- Tests for legacy migration, permission checks, cog visibility behavior, provider parsing, and cache freshness behavior.
 
 ### Verified
 
-- `compileall` passed, per task context.
-- `pytest` passed 22/22, per task context.
-- Coverage reported at 31%, per task context.
+- `.venv\Scripts\python.exe -m pytest -q` passed `27/27`.
+- `.venv\Scripts\python.exe -m pytest --cov=bot --cov-report=term-missing -q` passed with `62%` bot coverage.
+- Local compile/import checks passed.
 
 ### Known Gaps
 
-- No real Discord smoke test completed.
-- No real external API smoke test completed.
-- Automated coverage below original plan target.
-
+- No live Discord smoke test completed yet.
+- No live PUBG API smoke test completed yet.
+- Coverage remains weakest in `bot/cogs/stats_cog.py`, `bot/cogs/leaderboard_cog.py`, `bot/embeds.py`, and `bot/main.py`.
+- Deployment guide still needs full PUBG-only runbook cleanup.
