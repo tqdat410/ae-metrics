@@ -1,4 +1,4 @@
-# Replace __USER__, __APP_DIR__, __PYTHON__ before installing.
+# Replace __USER__, __APP_DIR__ before installing.
 # Copy to /etc/systemd/system/discord-bot.service then:
 #   sudo systemctl daemon-reload && sudo systemctl enable --now discord-bot
 
@@ -10,11 +10,21 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=__USER__
+Group=__USER__
 WorkingDirectory=__APP_DIR__
 EnvironmentFile=__APP_DIR__/.env
 ExecStart=__APP_DIR__/.venv/bin/python -m bot.main
 Restart=on-failure
 RestartSec=10
+StandardOutput=append:/var/log/discord-bot/bot.log
+StandardError=append:/var/log/discord-bot/bot.log
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=__APP_DIR__ /var/log/discord-bot
+ProtectHome=true
 
 [Install]
 WantedBy=multi-user.target
