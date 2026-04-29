@@ -52,15 +52,9 @@ The bot registers commands to `DISCORD_GUILD_ID` only.
 
 ## Deployment
 
-Deployment templates live in `deploy/` for Oracle Cloud Free ARM + Ubuntu + systemd.
+Bot runs anywhere Python 3.11+ and a process supervisor (systemd, Docker, supervisord, pm2) are available. See [`docs/deployment-guide.md`](docs/deployment-guide.md) for generic steps and a systemd unit template.
 
-1. Provision an Ubuntu 22.04 ARM instance.
-2. Copy this repository to `/opt/discord-bot`.
-3. Create `/opt/discord-bot/.env`.
-4. Run `sudo deploy/install.sh`.
-5. Start with `sudo systemctl start discord-bot`.
-
-Riot development keys expire every 24 hours. Preferred renewal: edit `RIOT_API_KEY` in `.env` on the VM, then run `/admin reload-key` in Discord to reload it without restarting. Fallback: restart the service.
+Riot development keys expire every 24 hours. Preferred renewal: edit `RIOT_API_KEY` in `.env`, then run `/admin reload-key` in Discord. Fallback: restart the service.
 
 ## Manual Smoke Test
 
