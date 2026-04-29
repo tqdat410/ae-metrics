@@ -12,6 +12,7 @@ from bot import db
 from bot.config import get_settings
 from bot.http_client import get_client
 from bot.providers import AccountInfo, NotFoundError, RankInfo, UpstreamError, handle_response, upstream_error
+from bot.rate_limiter import throttle
 
 LOGGER = logging.getLogger(__name__)
 BASE_URL = "https://api.pubg.com"
@@ -217,12 +218,17 @@ class PubgProvider:
         )
         players = payload.get("data") or []
         recent_ids: dict[str, list[str]] = {account_id: [] for account_id in account_ids}
+        returned_ids: set[str] = set()
         for player in players:
             account_id = player.get("id")
             if not account_id:
                 continue
+            returned_ids.add(account_id)
             matches = ((player.get("relationships") or {}).get("matches") or {}).get("data") or []
             recent_ids[account_id] = [item.get("id") for item in matches if item.get("id")][:limit]
+        missing_ids = sorted(set(account_ids) - returned_ids)
+        for account_id in missing_ids:
+            LOGGER.warning("PUBG player missing from batch matches response: account_id=%s platform=%s", account_id, platform)
         return recent_ids
 
     async def fetch_match_summary(self, account: AccountInfo, match_id: str) -> dict:
@@ -274,6 +280,7 @@ class PubgProvider:
 
     async def _get_json(self, url: str, label: str, params: dict[str, str] | None = None) -> dict:
         LOGGER.info("PUBG provider GET %s", label)
+        await throttle("pubg")
         headers = {"Authorization": f"Bearer {self._api_key}", "Accept": "application/vnd.api+json"}
         try:
             response = await self._client.get(url, headers=headers, params=params)

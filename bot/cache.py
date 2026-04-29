@@ -12,8 +12,7 @@ CACHE_TTL = {
     "source-ranked:": 30 * 60,
     "source-lifetime:": 60 * 60,
     "source-recent:": 15 * 60,
-    "source-mastery": 60 * 60,
-    "profile-overview:": 10 * 60,
+    "source-mastery:v1": 60 * 60,
     "profile-ranked:": 10 * 60,
     "profile-lifetime:": 10 * 60,
     "profile-recent:": 10 * 60,
@@ -38,7 +37,7 @@ def _ttl_for_view(view: str, ttl: int | None = None) -> int:
         return ttl
     if view in CACHE_TTL:
         return CACHE_TTL[view]
-    for prefix, prefix_ttl in CACHE_TTL.items():
+    for prefix, prefix_ttl in sorted(CACHE_TTL.items(), key=lambda item: len(item[0]), reverse=True):
         if view.startswith(prefix):
             return prefix_ttl
     return 15 * 60

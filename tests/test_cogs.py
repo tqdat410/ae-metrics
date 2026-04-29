@@ -90,14 +90,10 @@ async def test_leaderboard_is_public(monkeypatch):
     cog = LeaderboardCog(SimpleNamespace())
     interaction = FakeInteraction(1)
 
-    async def fake_refresh(rows):
-        assert rows
-
     async def fake_entries(rows):
         assert rows
         return ["`[#1]` **PlayerOne** :: `2.5h | 3 matches`"]
 
-    monkeypatch.setattr(cog, "_refresh_recent_matches", fake_refresh)
     monkeypatch.setattr(cog, "_entries", fake_entries)
 
     await cog.leaderboard.callback(cog, interaction)
@@ -221,7 +217,7 @@ def test_leaderboard_command_has_no_metric_option():
 
 
 @pytest.mark.usefixtures("tmp_db")
-async def test_leaderboard_entries_rank_by_hours_played(monkeypatch):
+async def test_leaderboard_entries_rank_by_hours_played():
     await db.upsert_pubg_link(1, "account-1", "steam", "PlayerOne")
     await db.upsert_pubg_link(2, "account-2", "steam", "PlayerTwo")
     await db.upsert_match_summary(
@@ -269,14 +265,53 @@ async def test_leaderboard_entries_rank_by_hours_played(monkeypatch):
     cog = LeaderboardCog(SimpleNamespace())
     rows = await db.list_pubg_links()
 
-    async def no_refresh(_rows):
-        return None
-
-    monkeypatch.setattr(cog, "_refresh_recent_matches", no_refresh)
-
     entries = await cog._entries(rows)
 
     assert entries == [
         "`[#1]` **PlayerOne** :: `2.5h | 2 matches`",
         "`[#2]` **PlayerTwo** :: `1.5h | 1 matches`",
+    ]
+
+
+@pytest.mark.usefixtures("tmp_db")
+async def test_leaderboard_entries_include_inactive_users():
+    await db.upsert_pubg_link(1, "account-1", "steam", "PlayerOne")
+    await db.upsert_pubg_link(2, "account-2", "steam", "PlayerTwo")
+    await db.upsert_pubg_link(3, "account-3", "steam", "PlayerThree")
+    await db.insert_match_summary_if_absent(
+        {
+            "match_id": "match-1",
+            "pubg_account_id": "account-1",
+            "platform": "steam",
+            "game_mode": "squad-fpp",
+            "played_at": "2099-01-10T00:00:00Z",
+            "kills": 2,
+            "damage": 100.0,
+            "assists": 1,
+            "revives": 0,
+            "survival_time_seconds": 7200,
+        }
+    )
+    await db.insert_match_summary_if_absent(
+        {
+            "match_id": "match-2",
+            "pubg_account_id": "account-2",
+            "platform": "steam",
+            "game_mode": "squad-fpp",
+            "played_at": "2099-01-11T00:00:00Z",
+            "kills": 1,
+            "damage": 50.0,
+            "assists": 0,
+            "revives": 0,
+            "survival_time_seconds": 1800,
+        }
+    )
+
+    cog = LeaderboardCog(SimpleNamespace())
+    entries = await cog._entries(await db.list_pubg_links())
+
+    assert entries == [
+        "`[#1]` **PlayerOne** :: `2.0h | 1 matches`",
+        "`[#2]` **PlayerTwo** :: `0.5h | 1 matches`",
+        "`[#3]` **PlayerThree** :: `0.0h | 0 matches`",
     ]

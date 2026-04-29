@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 _conn: aiosqlite.Connection | None = None
 _db_path: Path | None = None
 
@@ -28,6 +29,10 @@ async def close() -> None:
         await _conn.close()
         _conn = None
     _db_path = None
+
+
+async def commit() -> None:
+    await _db().commit()
 
 
 def _db() -> aiosqlite.Connection:
@@ -98,6 +103,8 @@ async def _ensure_schema() -> None:
 
     migrations = Path(__file__).with_name("migrations.sql").read_text(encoding="utf-8")
     await _db().executescript(migrations)
+    await _apply_schema_v2()
+    await _apply_schema_v3()
     if await _schema_version() < SCHEMA_VERSION:
         await _mark_schema_version(SCHEMA_VERSION)
     await _db().commit()
@@ -151,8 +158,85 @@ async def _migrate_legacy_schema() -> None:
         WHERE legacy_cache.game='pubg' AND legacy_links.account_id IS NOT NULL
         """
     )
+    await _apply_schema_v2()
+    await _apply_schema_v3()
     await _mark_schema_version(SCHEMA_VERSION)
     await _db().commit()
+
+
+async def _apply_schema_v2() -> None:
+    columns = await _table_columns("match_summaries")
+    if "played_at_unix" not in columns:
+        await _db().execute("ALTER TABLE match_summaries ADD COLUMN played_at_unix INTEGER")
+
+    await _db().execute(
+        """
+        UPDATE match_summaries
+        SET played_at_unix = CAST(strftime('%s', REPLACE(played_at, 'Z', '+00:00')) AS INTEGER)
+        WHERE played_at_unix IS NULL AND played_at IS NOT NULL AND played_at != ''
+        """
+    )
+    await _db().execute("CREATE INDEX IF NOT EXISTS idx_match_summaries_played_unix ON match_summaries(played_at_unix)")
+
+
+async def _apply_schema_v3() -> None:
+    columns = await _table_columns("match_summaries")
+    if not columns:
+        return
+
+    cur = await _db().execute("PRAGMA table_info(match_summaries)")
+    pk_columns = [row["name"] for row in await cur.fetchall() if row["pk"]]
+    if pk_columns == ["match_id", "pubg_account_id", "platform"]:
+        return
+
+    await _db().execute(
+        """
+        CREATE TABLE IF NOT EXISTS match_summaries_v3 (
+            match_id TEXT NOT NULL,
+            pubg_account_id TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            game_mode TEXT NOT NULL,
+            played_at TEXT NOT NULL,
+            map_name TEXT,
+            placement INTEGER,
+            kills INTEGER,
+            damage REAL,
+            assists INTEGER,
+            revives INTEGER,
+            survival_time_seconds REAL,
+            payload_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            played_at_unix INTEGER,
+            PRIMARY KEY(match_id, pubg_account_id, platform)
+        )
+        """
+    )
+    await _db().execute(
+        """
+        INSERT OR IGNORE INTO match_summaries_v3 (
+            match_id, pubg_account_id, platform, game_mode, played_at, map_name, placement, kills,
+            damage, assists, revives, survival_time_seconds, payload_json, updated_at, played_at_unix
+        )
+        SELECT
+            match_id, pubg_account_id, platform, game_mode, played_at, map_name, placement, kills,
+            damage, assists, revives, survival_time_seconds, payload_json, updated_at, played_at_unix
+        FROM match_summaries
+        """
+    )
+    await _db().execute("DROP TABLE match_summaries")
+    await _db().execute("ALTER TABLE match_summaries_v3 RENAME TO match_summaries")
+    await _db().execute("CREATE INDEX IF NOT EXISTS idx_match_summaries_account_played ON match_summaries(pubg_account_id, platform, played_at DESC)")
+    await _db().execute("CREATE INDEX IF NOT EXISTS idx_match_summaries_played ON match_summaries(played_at)")
+    await _db().execute("CREATE INDEX IF NOT EXISTS idx_match_summaries_played_unix ON match_summaries(played_at_unix)")
+
+
+def _parse_played_at_unix(played_at: str | None) -> int | None:
+    if not played_at:
+        return None
+    try:
+        return int(datetime.fromisoformat(played_at.replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
 
 
 async def list_legacy_pubg_links() -> list[dict[str, Any]]:
@@ -194,14 +278,24 @@ async def upsert_pubg_link(
     await _db().commit()
 
 
+async def _purge_account_rows(pubg_account_id: str, platform: str) -> None:
+    for table in ("rank_cache", "match_summaries", "match_cursors", "stat_snapshots"):
+        await _db().execute(f"DELETE FROM {table} WHERE pubg_account_id=? AND platform=?", (pubg_account_id, platform))
+
+
+async def purge_account(pubg_account_id: str, platform: str) -> None:
+    await _purge_account_rows(pubg_account_id, platform)
+    await _db().commit()
+
+
 async def delete_pubg_link(discord_user_id: int) -> bool:
     link = await get_pubg_link(discord_user_id)
     if not link:
         return False
-    cur = await _db().execute("DELETE FROM linked_accounts WHERE discord_user_id=?", (discord_user_id,))
-    await delete_cache(link["pubg_account_id"], link["platform"])
+    await _db().execute("DELETE FROM linked_accounts WHERE discord_user_id=?", (discord_user_id,))
+    await _purge_account_rows(link["pubg_account_id"], link["platform"])
     await _db().commit()
-    return cur.rowcount > 0
+    return True
 
 
 async def list_pubg_links() -> list[dict[str, Any]]:
@@ -248,12 +342,13 @@ async def get_state(key: str) -> str | None:
     return row["value"] if row else None
 
 
-async def set_state(key: str, value: str) -> None:
+async def set_state(key: str, value: str, *, commit: bool = True) -> None:
     await _db().execute(
         "INSERT OR REPLACE INTO api_state(key, value, updated_at) VALUES (?, ?, ?)",
         (key, value, int(time.time())),
     )
-    await _db().commit()
+    if commit:
+        await _db().commit()
 
 
 async def get_match_cursor(pubg_account_id: str, platform: str) -> dict[str, Any] | None:
@@ -265,7 +360,7 @@ async def get_match_cursor(pubg_account_id: str, platform: str) -> dict[str, Any
     return json.loads(row["cursor_json"]) if row else None
 
 
-async def set_match_cursor(pubg_account_id: str, platform: str, cursor: dict[str, Any]) -> None:
+async def set_match_cursor(pubg_account_id: str, platform: str, cursor: dict[str, Any], *, commit: bool = True) -> None:
     await _db().execute(
         """
         INSERT OR REPLACE INTO match_cursors(pubg_account_id, platform, cursor_json, updated_at)
@@ -273,17 +368,39 @@ async def set_match_cursor(pubg_account_id: str, platform: str, cursor: dict[str
         """,
         (pubg_account_id, platform, json.dumps(cursor), int(time.time())),
     )
-    await _db().commit()
+    if commit:
+        await _db().commit()
 
 
-async def upsert_match_summary(summary: dict[str, Any]) -> None:
+async def set_match_cursors(cursors: list[tuple[str, str, dict[str, Any]]], *, commit: bool = True) -> None:
+    now = int(time.time())
+    await _db().executemany(
+        """
+        INSERT OR REPLACE INTO match_cursors(pubg_account_id, platform, cursor_json, updated_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        [(account_id, platform, json.dumps(cursor), now) for account_id, platform, cursor in cursors],
+    )
+    if commit:
+        await _db().commit()
+
+
+async def match_summary_exists(match_id: str, pubg_account_id: str, platform: str) -> bool:
+    cur = await _db().execute(
+        "SELECT 1 FROM match_summaries WHERE match_id=? AND pubg_account_id=? AND platform=?",
+        (match_id, pubg_account_id, platform),
+    )
+    return await cur.fetchone() is not None
+
+
+async def _insert_match_summary_if_absent(summary: dict[str, Any]) -> None:
     await _db().execute(
         """
-        INSERT OR REPLACE INTO match_summaries (
-            match_id, pubg_account_id, platform, game_mode, played_at, map_name, placement, kills,
+        INSERT OR IGNORE INTO match_summaries (
+            match_id, pubg_account_id, platform, game_mode, played_at, played_at_unix, map_name, placement, kills,
             damage, assists, revives, survival_time_seconds, payload_json, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             summary["match_id"],
@@ -291,6 +408,7 @@ async def upsert_match_summary(summary: dict[str, Any]) -> None:
             summary["platform"],
             summary["game_mode"],
             summary["played_at"],
+            _parse_played_at_unix(summary.get("played_at")),
             summary.get("map_name"),
             summary.get("placement"),
             summary.get("kills"),
@@ -302,7 +420,22 @@ async def upsert_match_summary(summary: dict[str, Any]) -> None:
             int(time.time()),
         ),
     )
+
+
+async def insert_match_summary_if_absent(summary: dict[str, Any]) -> None:
+    await _insert_match_summary_if_absent(summary)
     await _db().commit()
+
+
+async def insert_match_summaries_if_absent(summaries: list[dict[str, Any]], *, commit: bool = True) -> None:
+    for summary in summaries:
+        await _insert_match_summary_if_absent(summary)
+    if commit:
+        await _db().commit()
+
+
+async def upsert_match_summary(summary: dict[str, Any]) -> None:
+    await insert_match_summary_if_absent(summary)
 
 
 async def list_recent_match_summaries(pubg_account_id: str, platform: str, limit: int = 5) -> list[dict[str, Any]]:
@@ -311,7 +444,7 @@ async def list_recent_match_summaries(pubg_account_id: str, platform: str, limit
         SELECT payload_json
         FROM match_summaries
         WHERE pubg_account_id=? AND platform=?
-        ORDER BY played_at DESC
+        ORDER BY COALESCE(played_at_unix, 0) DESC, played_at DESC
         LIMIT ?
         """,
         (pubg_account_id, platform, limit),
@@ -333,6 +466,23 @@ async def list_match_activity_since(played_at_cutoff: str) -> list[dict[str, Any
         GROUP BY pubg_account_id, platform
         """,
         (played_at_cutoff,),
+    )
+    return [dict(row) for row in await cur.fetchall()]
+
+
+async def list_match_activity_since_unix(cutoff_unix: int) -> list[dict[str, Any]]:
+    cur = await _db().execute(
+        """
+        SELECT
+            pubg_account_id,
+            platform,
+            COUNT(*) AS match_count,
+            COALESCE(SUM(survival_time_seconds), 0) AS total_survival_seconds
+        FROM match_summaries
+        WHERE played_at_unix IS NOT NULL AND played_at_unix >= ?
+        GROUP BY pubg_account_id, platform
+        """,
+        (cutoff_unix,),
     )
     return [dict(row) for row in await cur.fetchall()]
 

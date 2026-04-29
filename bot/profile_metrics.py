@@ -19,8 +19,8 @@ def summarize_recent(matches: list[dict[str, Any]], mode: str, window: int) -> d
     kills = [_number(match.get("kills")) for match in filtered]
     damage = [_number(match.get("damage")) for match in filtered]
     survival = [_number(match.get("survival_time_seconds")) for match in filtered]
-    wins = sum(1 for match in filtered if int(match.get("placement") or 999) == 1)
-    top10s = sum(1 for match in filtered if int(match.get("placement") or 999) <= 10)
+    wins = sum(1 for match in filtered if match.get("placement") is not None and int(match["placement"]) == 1)
+    top10s = sum(1 for match in filtered if match.get("placement") is not None and int(match["placement"]) <= 10)
     return {
         "mode": mode,
         "window": window,

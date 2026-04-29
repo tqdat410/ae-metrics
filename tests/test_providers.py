@@ -230,3 +230,27 @@ async def test_pubg_provider_rejects_missing_account_id_in_lookup(respx_mock):
     with pytest.raises(UpstreamError):
         await provider.lookup_account("Player", None, "steam")
     await provider._client.aclose()
+
+
+async def test_pubg_provider_throttles_all_gets(monkeypatch):
+    provider = PubgProvider(client=httpx.AsyncClient(), api_key="test")
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    async def fake_get(url, headers=None, params=None):
+        return httpx.Response(200, request=httpx.Request("GET", url), json={"data": []})
+
+    monkeypatch.setattr("bot.rate_limiter.INTERVALS", {"pubg": 0.05})
+    monkeypatch.setattr("bot.rate_limiter._last_seen", {"pubg": 0.0})
+    monkeypatch.setattr("bot.rate_limiter._locks", {"pubg": __import__("asyncio").Lock()})
+    monkeypatch.setattr("bot.rate_limiter.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(provider._client, "get", fake_get)
+
+    await provider._get_json("https://example.test/a", "A")
+    await provider._get_json("https://example.test/b", "B")
+    await provider._client.aclose()
+
+    assert sleep_calls
+    assert any(delay >= 0.045 for delay in sleep_calls)

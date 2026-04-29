@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS match_cursors (
 );
 
 CREATE TABLE IF NOT EXISTS match_summaries (
-    match_id TEXT PRIMARY KEY,
+    match_id TEXT NOT NULL,
     pubg_account_id TEXT NOT NULL,
     platform TEXT NOT NULL,
     game_mode TEXT NOT NULL,
@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS match_summaries (
     revives INTEGER,
     survival_time_seconds REAL,
     payload_json TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(match_id, pubg_account_id, platform)
 );
 
 CREATE TABLE IF NOT EXISTS stat_snapshots (
@@ -66,3 +67,4 @@ CREATE TABLE IF NOT EXISTS stat_snapshots (
 CREATE INDEX IF NOT EXISTS idx_linked_accounts_platform ON linked_accounts(platform);
 CREATE INDEX IF NOT EXISTS idx_rank_cache_platform_view ON rank_cache(platform, view);
 CREATE INDEX IF NOT EXISTS idx_match_summaries_account_played ON match_summaries(pubg_account_id, platform, played_at DESC);
+CREATE INDEX IF NOT EXISTS idx_match_summaries_played ON match_summaries(played_at);

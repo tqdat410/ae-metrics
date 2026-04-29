@@ -10,6 +10,8 @@ from discord.ext import commands
 
 from bot import db, http_client
 from bot.config import Settings, get_settings
+from bot.match_warmer import start as start_match_warmer
+from bot.match_warmer import stop as stop_match_warmer
 
 
 def setup_logging(settings: Settings) -> None:
@@ -38,6 +40,7 @@ class GameStatsBot(commands.Bot):
         from bot.providers.pubg_provider import prewarm_current_seasons
 
         self.background_tasks.append(asyncio.create_task(prewarm_current_seasons(["steam"]), name="pubg-season-prewarm"))
+        self.background_tasks.append(start_match_warmer(self))
 
     async def _load_cogs(self) -> None:
         import bot.cogs
@@ -49,6 +52,7 @@ class GameStatsBot(commands.Bot):
                 await setup(self)
 
     async def close(self) -> None:
+        await stop_match_warmer()
         for task in self.background_tasks:
             task.cancel()
         if self.background_tasks:

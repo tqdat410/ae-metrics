@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from types import SimpleNamespace
 
 import discord
 from discord import app_commands
@@ -12,7 +11,7 @@ from bot.compare_view import CompareView
 from bot.embeds import make_message_embed
 from bot.profile_view import ProfileView
 from bot.profile_hub_service import ProfileHubService
-from bot.providers import get_provider
+from bot.providers import ApiKeyError, NotFoundError, RateLimitError, account_from_link, get_provider
 from bot.validators import (
     PROFILE_VISIBILITIES,
     PUBG_PLATFORMS,
@@ -26,24 +25,15 @@ VISIBILITY_CHOICES = [app_commands.Choice(name=value, value=value) for value in 
 
 
 def _friendly_error(exc: Exception) -> str:
-    name = exc.__class__.__name__
-    if name == "NotFoundError":
+    if isinstance(exc, NotFoundError):
         return "PUBG account or stats not found."
-    if name == "RateLimitError":
+    if isinstance(exc, RateLimitError):
         return "PUBG API rate limit hit. Try again in a minute."
-    if name == "ApiKeyError":
+    if isinstance(exc, ApiKeyError):
         return "PUBG API key is invalid or expired."
     if isinstance(exc, ValueError):
         return str(exc)
     return "Could not fetch PUBG stats right now. Try again later."
-
-
-def _account_from_link(link: dict) -> SimpleNamespace:
-    return SimpleNamespace(
-        account_id=link["pubg_account_id"],
-        canonical_name=link["canonical_name"],
-        region=link["platform"],
-    )
 
 
 class StatsCog(commands.Cog):
@@ -71,7 +61,7 @@ class StatsCog(commands.Cog):
                     ephemeral=True,
                 )
                 return
-            account = _account_from_link(link)
+            account = account_from_link(link)
             await self._send_profile_response(interaction, account, visibility=visibility)
         except Exception as exc:
             LOGGER.exception("Profile lookup failed")
@@ -118,8 +108,8 @@ class StatsCog(commands.Cog):
                 )
                 return
 
-            left_account = _account_from_link(left_link)
-            right_account = _account_from_link(right_link)
+            left_account = account_from_link(left_link)
+            right_account = account_from_link(right_link)
             left = await self.profile_hub.build(left_account)
             right = await self.profile_hub.build(right_account)
             view = CompareView(user_a.display_name, user_b.display_name, left, right)
@@ -140,7 +130,7 @@ class StatsCog(commands.Cog):
     async def _send_profile_response(
         self,
         interaction: discord.Interaction,
-        account: SimpleNamespace,
+        account: object,
         *,
         visibility: str,
     ) -> None:

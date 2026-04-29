@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -63,6 +64,14 @@ def handle_response(response: httpx.Response, service: str) -> None:
 
 def upstream_error(service: str, error: httpx.RequestError) -> UpstreamError:
     return UpstreamError(f"{service} request failed: {error.__class__.__name__}")
+
+
+def account_from_link(link: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(
+        account_id=link["pubg_account_id"],
+        canonical_name=link["canonical_name"],
+        region=link["platform"],
+    )
 
 
 def get_provider():
