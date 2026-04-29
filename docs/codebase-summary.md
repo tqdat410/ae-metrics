@@ -4,7 +4,7 @@ Last updated: 2026-04-29
 
 ## Overview
 
-AE Metrics is a private Discord slash-command bot for PUBG account linking, profile views, leaderboards, compare flows, and lightweight recent-match summaries. It uses Python 3.11+, `discord.py`, async `httpx`, `aiosqlite`, and SQLite persistence.
+AE Metrics is a private Discord slash-command bot for PUBG account linking, profile overviews, compare flows, shared leaderboards, and internal recent-match analytics. It uses Python 3.11+, `discord.py`, async `httpx`, `aiosqlite`, and SQLite persistence.
 
 ## Runtime Entry Points
 
@@ -22,11 +22,10 @@ AE Metrics is a private Discord slash-command bot for PUBG account linking, prof
 | --- | --- | --- |
 | `/link pubg` | `bot/cogs/link_cog.py` | Links caller to PUBG account |
 | `/unlink` | `bot/cogs/link_cog.py` | Removes caller PUBG link and cached views |
-| `/profile` | `bot/cogs/stats_cog.py` | Linked profile with `ranked` or `lifetime` view |
+| `/profile` | `bot/cogs/stats_cog.py` | One-embed profile view with button-switched all, recent, and rank pages |
 | `/lookup` | `bot/cogs/stats_cog.py` | Direct PUBG lookup without DB write |
-| `/compare` | `bot/cogs/stats_cog.py` | Compares two linked members |
-| `/matches` | `bot/cogs/stats_cog.py` | Shows recent stored/fetched match summaries |
-| `/leaderboard` | `bot/cogs/leaderboard_cog.py` | Public leaderboard for supported metrics |
+| `/compare` | `bot/cogs/stats_cog.py` | One-embed compare with button-switched all, recent, and rank pages |
+| `/leaderboard` | `bot/cogs/leaderboard_cog.py` | Public `7D` activity leaderboard ranked by hours played |
 | `/admin link set/delete` | `bot/cogs/admin_cog.py` | Admin-only cross-user link mutation |
 
 ## Data Model
@@ -35,7 +34,7 @@ AE Metrics is a private Discord slash-command bot for PUBG account linking, prof
 | --- | --- |
 | `schema_migrations` | Schema version history |
 | `linked_accounts` | PUBG link per Discord member |
-| `rank_cache` | Cached payloads for ranked/lifetime/match views |
+| `rank_cache` | Cached payloads for ranked, lifetime, source, recent, and overview views |
 | `api_state` | Current season cache |
 | `match_cursors` | Recent-match polling state |
 | `match_summaries` | Normalized recent matches |
@@ -52,7 +51,7 @@ AE Metrics is a private Discord slash-command bot for PUBG account linking, prof
 
 | File | Behavior |
 | --- | --- |
-| `bot/cache.py` | View-based cache for `ranked`, `lifetime`, `recent_matches` |
+| `bot/cache.py` | View-based cache for source payloads and overview assembly |
 | `bot/rate_limiter.py` | Lightweight sequential PUBG throttle |
 
 ## Tests And Validation
@@ -60,7 +59,7 @@ AE Metrics is a private Discord slash-command bot for PUBG account linking, prof
 | Item | Status |
 | --- | --- |
 | Compile/import | Passed locally |
-| Tests | `27/27` passing |
+| Tests | `44/44` passing locally |
 | Coverage | `62%` bot coverage |
 | Real Discord/API smoke | Not performed |
 

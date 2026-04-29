@@ -4,9 +4,9 @@ Private Discord bot for PUBG account linking, profile lookup, leaderboard views,
 
 ## Features
 
-- PUBG-only slash commands for linking, unlinking, direct lookup, profile views, compare, leaderboard, admin link override, and recent matches.
+- PUBG-only slash commands for linking, unlinking, direct lookup, overview profiles, compare, leaderboard, and admin link override.
 - SQLite persistence for linked accounts, cached profile views, season state, match cursors, match summaries, and stat snapshots.
-- Async PUBG provider with season cache, ranked/lifetime views, and lightweight recent-match summary parsing.
+- Async PUBG provider with season cache, overview aggregation, mastery fetches, and lightweight recent-match summary parsing.
 - Lightweight cache/throttle tuned for a private server with fewer than 10 members.
 
 ## Setup
@@ -41,13 +41,16 @@ The bot registers commands to `DISCORD_GUILD_ID` only.
 
 - `/link pubg name platform`
 - `/unlink`
-- `/profile [user] [view]`
-- `/lookup name [platform] [view]`
-- `/compare user_a user_b [view]`
-- `/leaderboard [metric]`
-- `/matches [user] [count]`
+- `/profile [user] [visibility]`
+- `/lookup name [platform]`
+- `/compare user_a user_b`
+- `/leaderboard`
 - `/admin link set user name platform`
 - `/admin link delete user`
+
+`/profile` now returns one interactive embed with `All`, `Recent`, and `Rank` buttons. `All` focuses on lifetime stats, `Recent` shows the 20-game window, and `Rank` isolates current ranked stats.
+`/compare` now returns one private embed with `All`, `Recent`, and `Rank` buttons. Each metric renders as a horizontal 10-block bar plus the exact value.
+`/leaderboard` now returns one public `7D` activity leaderboard ranked by hours played, with match count shown as supporting context.
 
 ## Deployment
 
@@ -56,11 +59,11 @@ Bot runs anywhere Python 3.11+ and a process supervisor (systemd, Docker, superv
 ## Manual Smoke Test
 
 - [ ] `/link pubg` with a real PUBG account
-- [ ] `/profile` self with `ranked`
-- [ ] `/profile` another linked member with `lifetime`
+- [ ] `/profile` self overview
+- [ ] `/profile` another linked member overview
+- [ ] `/profile` with `visibility:public`
 - [ ] `/lookup` a public PUBG name
 - [ ] `/compare` between two linked members
-- [ ] `/leaderboard` with 3+ linked members
-- [ ] `/matches` returns recent summaries
+- [ ] `/leaderboard` with 3+ linked members and visible 7-day activity
 - [ ] `/unlink` clears account and cached views
 - [ ] `/admin link set` and `/admin link delete` enforce admin-only behavior

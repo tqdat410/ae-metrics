@@ -6,12 +6,12 @@ Generic deployment instructions. The bot has no OS-specific runtime requirements
 
 - Python 3.11 or newer
 - A process supervisor (systemd, Docker, supervisord, pm2, etc.)
-- Outbound HTTPS to Discord, Riot, HenrikDev, and PUBG APIs
+- Outbound HTTPS to Discord and PUBG APIs
 - ~256 MB RAM is enough for a private server with <10 members; add 2 GB swap if your VPS has <2 GB RAM
 
 ## Install
 
-1. Clone the repo to your chosen `APP_DIR` (e.g. `/opt/discord-bot`, `~/apps/ae-metrics`).
+1. Clone the repo to your chosen app directory (e.g. `/opt/discord-bot`, `~/apps/ae-metrics`).
 2. Create a virtualenv and install dependencies:
    ```bash
    python3.11 -m venv .venv
@@ -65,13 +65,12 @@ git pull --ff-only
 sudo systemctl restart discord-bot   # or: docker restart ae-metrics
 ```
 
-## Riot key rotation
+## Config rotation
 
-Riot dev keys expire every 24h.
+If you rotate Discord or PUBG secrets:
 
-1. Edit `RIOT_API_KEY` in `.env` on the host.
-2. In Discord, run `/admin reload-key` (requires `ADMIN_DISCORD_ID` in env).
-3. Fallback if `/admin reload-key` is unavailable: restart the service.
+1. Edit the relevant key in `.env` on the host.
+2. Restart the service so the bot reloads settings.
 
 ## Logs
 

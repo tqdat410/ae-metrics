@@ -4,7 +4,7 @@ Last updated: 2026-04-29
 
 ## Product Summary
 
-AE Metrics is a private Discord PUBG stats bot for a small server. It lets members link one PUBG account, inspect ranked/lifetime views, compare linked members, browse a shared leaderboard, and inspect recent match summaries without leaving Discord.
+AE Metrics is a private Discord PUBG stats bot for a small server. It lets members link one PUBG account, open one clear overview profile, compare linked members, and browse a shared leaderboard without leaving Discord.
 
 ## Users
 
@@ -21,11 +21,11 @@ AE Metrics is a private Discord PUBG stats bot for a small server. It lets membe
 | --- | --- | --- |
 | Guild-scoped slash commands | Implemented | Bot syncs to `DISCORD_GUILD_ID` |
 | PUBG account linking | Implemented | `/link pubg`, `/unlink` |
-| Linked profile views | Implemented | `/profile [user] [view]` |
-| Direct player lookup | Implemented | `/lookup name [platform] [view]` |
-| Member compare | Implemented | `/compare user_a user_b [view]` |
-| Shared leaderboard | Implemented | `/leaderboard [metric]` |
-| Recent match summaries | Implemented | `/matches [user] [count]` |
+| Linked profile overview | Implemented | `/profile [user] [visibility]` |
+| Direct player lookup | Implemented | `/lookup name [platform]` |
+| Member compare | Implemented | `/compare user_a user_b` |
+| Shared leaderboard | Implemented | `/leaderboard` fixed to 7-day activity |
+| Recent match summaries | Internal support only | Recent-20 form inside `/profile` and `/compare` |
 | Admin link override | Implemented | `/admin link set/delete` |
 | SQLite persistence and migration | Implemented | `linked_accounts`, cache, match, snapshot, migration tables |
 
@@ -44,7 +44,7 @@ AE Metrics is a private Discord PUBG stats bot for a small server. It lets membe
 
 | Check | Status |
 | --- | --- |
-| Automated tests | Passed `27/27` |
+| Automated tests | Passed `44/44` |
 | Coverage | `62%` bot coverage |
 | Real Discord smoke | Not done |
 | Real PUBG API smoke | Not done |
@@ -54,7 +54,7 @@ AE Metrics is a private Discord PUBG stats bot for a small server. It lets membe
 
 - Multi-game support.
 - OAuth flows or web dashboard.
-- Telemetry-heavy deep analytics.
+- Telemetry-heavy deep analytics beyond stored-match heuristics.
 - Multi-server public-bot scale strategy.
 - Full Discord E2E automation.
 
@@ -64,5 +64,5 @@ AE Metrics is a private Discord PUBG stats bot for a small server. It lets membe
 | --- | --- | --- |
 | No live smoke test yet | Unknown Discord/API runtime issues | Run README manual checklist |
 | Live migration not rehearsed on target host | Rollback confidence gap | Backup + migration validation before production switch |
-| Coverage still weak in startup and some cog paths | Regressions can slip | Add deeper cog/startup tests |
+| Overview mixes current ranked, lifetime, and recent windows | Users can misread time scope | Keep labels explicit in embed copy |
 | PUBG upstream freshness is delayed | “Real-time” perception can be wrong | Keep summaries/stats labeled and lightweight |

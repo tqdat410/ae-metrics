@@ -32,6 +32,7 @@ Last updated: 2026-04-29
 | PUBG provider | `bot/providers/*.py` |
 | Shared provider contracts | `bot/providers/__init__.py` |
 | Embed rendering and metric formatting | `bot/embeds.py` |
+| Profile overview assembly/rendering | `bot/profile_hub_service.py`, `bot/profile_embeds.py`, `bot/profile_metrics.py` |
 | Input validation | `bot/validators.py` |
 | Permissions | `bot/permissions.py` |
 | Cache and throttling | `bot/cache.py`, `bot/rate_limiter.py` |
@@ -65,7 +66,7 @@ The settings layer checks required Discord/PUBG secrets before startup.
 ## Discord Command Standards
 
 - Defer interactions before provider or DB work.
-- Use ephemeral responses for link, unlink, profile, lookup, compare, matches, and admin actions.
+- Use ephemeral responses for link, unlink, profile, lookup, compare, and admin actions.
 - Use public response for leaderboard.
 - Convert provider exceptions into user-safe messages.
 - Gate cross-user mutations in the command layer before DB writes.
@@ -75,4 +76,4 @@ The settings layer checks required Discord/PUBG secrets before startup.
 - Use `pytest` with `pytest-asyncio`.
 - Test validators, DB helpers, migration behavior, cache freshness, embeds, provider parsing, permission checks, and critical cog behavior.
 - Prefer mocked HTTP for provider tests.
-- Current status: `27/27` passing, `62%` bot coverage.
+- Current status: `44/44` passing, `62%` bot coverage.

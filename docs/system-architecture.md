@@ -4,7 +4,7 @@ Last updated: 2026-04-29
 
 ## Architecture Summary
 
-AE Metrics is a single-process async Discord bot focused only on PUBG. Discord slash commands call PUBG-specific cogs, cogs use SQLite for identity/cache/analytics state, and the PUBG provider fetches account, season, ranked, lifetime, and match data.
+AE Metrics is a single-process async Discord bot focused only on PUBG. Discord slash commands call PUBG-specific cogs, cogs use SQLite for identity/cache/analytics state, and the PUBG provider fetches account, season, ranked, lifetime, mastery, and match data for one simplified overview profile.
 
 ```text
 Discord user
@@ -34,9 +34,14 @@ Discord user
 | `bot/cogs/*.py` | PUBG command handlers and visibility/permission behavior |
 | `bot/db.py` | SQLite schema setup, migration, links, cache, match state, snapshots |
 | `bot/providers/pubg_provider.py` | PUBG account/stats/match HTTP integration |
-| `bot/cache.py` | View-based TTL cache for ranked/lifetime/matches |
+| `bot/cache.py` | View-based TTL cache for ranked/lifetime/source/overview payloads |
 | `bot/permissions.py` | Admin identity check |
-| `bot/embeds.py` | PUBG profile/compare/leaderboard/matches rendering |
+| `bot/embeds.py` | Shared message and leaderboard rendering helpers |
+| `bot/profile_hub_service.py` | Overview profile assembly and source cache reuse |
+| `bot/profile_embeds.py` | Profile embed render rules for all, recent, and rank pages |
+| `bot/profile_view.py` | Profile embed button interaction state |
+| `bot/compare_view.py` | Compare embed render rules and button interaction state |
+| `bot/profile_metrics.py` | Recent-form and analysis heuristics from stored match summaries |
 
 ## Data Flow By Command
 
@@ -44,11 +49,10 @@ Discord user
 | --- | --- |
 | `/link pubg` | Validate platform -> PUBG player lookup -> save link |
 | `/unlink` | Delete linked account and cached views |
-| `/profile` | Read linked account -> cache hit or provider fetch -> embed |
-| `/lookup` | Validate platform/view -> provider lookup -> cached/fresh view fetch -> embed |
-| `/compare` | Read both links -> fetch comparable view for each -> compare embed |
-| `/leaderboard` | List links -> fetch chosen metric view per member -> sort -> public embed |
-| `/matches` | Read link -> fetch recent match IDs -> persist unseen summaries -> embed |
+| `/profile` | Read linked account -> assemble cached overview payload -> one profile embed with button-switched all, recent, and rank pages |
+| `/lookup` | Validate platform -> provider lookup -> assemble cached overview payload -> one overview embed |
+| `/compare` | Read both links -> build overview payloads for both -> one compare embed with button-switched all, recent, and rank pages |
+| `/leaderboard` | List links -> refresh recent match IDs/summaries -> aggregate stored 7-day survival time -> sort -> public embed |
 | `/admin link set/delete` | Verify admin -> mutate another member link -> ephemeral result |
 
 ## Persistence
@@ -59,7 +63,7 @@ SQLite is a single database file at `DB_PATH` or `bot.db`.
 | --- | --- |
 | `schema_migrations` | Applied schema version tracking |
 | `linked_accounts` | One primary PUBG link per Discord user |
-| `rank_cache` | Cached view payloads by `pubg_account_id + platform + view` |
+| `rank_cache` | Cached ranked, lifetime, source, recent, and overview payloads by `pubg_account_id + platform + view` |
 | `api_state` | Current season cache and small runtime state |
 | `match_cursors` | Last seen recent-match cursor data per account |
 | `match_summaries` | Normalized recent match summaries |
@@ -78,5 +82,5 @@ The DB layer uses one `aiosqlite` connection, WAL mode, and legacy migration wit
 
 - Real Discord smoke is still missing.
 - Real PUBG API smoke is still missing.
-- Coverage is improved but still incomplete in `StatsCog` and startup paths.
+- Coverage is improved but still incomplete in startup paths.
 - Deployment docs still need full PUBG-only operator cleanup.
