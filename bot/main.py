@@ -4,7 +4,6 @@ import asyncio
 import importlib
 import logging
 import pkgutil
-from logging.handlers import RotatingFileHandler
 
 import discord
 from discord.ext import commands
@@ -15,14 +14,10 @@ from bot.config import Settings, get_settings
 
 def setup_logging(settings: Settings) -> None:
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
-    handlers: list[logging.Handler] = [
-        logging.StreamHandler(),
-        RotatingFileHandler("bot.log", maxBytes=5 * 1024 * 1024, backupCount=3),
-    ]
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=handlers,
+        handlers=[logging.StreamHandler()],
     )
 
 
