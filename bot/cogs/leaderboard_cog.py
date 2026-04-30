@@ -4,10 +4,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from bot import db
 from bot.embeds import make_leaderboard_embed, make_message_embed
+from bot.validators import PROFILE_VISIBILITIES, validate_profile_visibility
+
+VISIBILITY_CHOICES = [app_commands.Choice(name=value, value=value) for value in PROFILE_VISIBILITIES]
 
 LOGGER = logging.getLogger(__name__)
 ACTIVITY_WINDOW_DAYS = 7
@@ -22,20 +26,24 @@ class LeaderboardCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @discord.app_commands.command(name="leaderboard", description="Show the PUBG activity leaderboard for linked members")
-    async def leaderboard(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
+    @app_commands.command(name="leaderboard", description="Show the PUBG activity leaderboard for linked members")
+    @app_commands.choices(visibility=VISIBILITY_CHOICES)
+    async def leaderboard(self, interaction: discord.Interaction, visibility: str = "private") -> None:
+        visibility = validate_profile_visibility(visibility)
+        ephemeral = visibility == "private"
+        await interaction.response.defer(ephemeral=ephemeral)
         try:
             rows = await db.list_pubg_links()
             if not rows:
-                await interaction.followup.send(embed=make_message_embed("Leaderboard", "No PUBG links yet."))
+                await interaction.followup.send(embed=make_message_embed("Leaderboard", "No PUBG links yet."), ephemeral=ephemeral)
                 return
             entries = await self._entries(rows)
-            await interaction.followup.send(embed=make_leaderboard_embed(entries))
+            await interaction.followup.send(embed=make_leaderboard_embed(entries), ephemeral=ephemeral)
         except Exception:
             LOGGER.exception("Leaderboard failed")
             await interaction.followup.send(
-                embed=make_message_embed("Leaderboard failed", "Could not build the PUBG leaderboard right now.", color=0xDC2626)
+                embed=make_message_embed("Leaderboard failed", "Could not build the PUBG leaderboard right now.", color=0xDC2626),
+                ephemeral=ephemeral,
             )
 
     async def _entries(self, rows: list[dict]) -> list[str]:

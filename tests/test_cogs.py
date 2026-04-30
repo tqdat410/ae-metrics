@@ -85,7 +85,7 @@ async def test_admin_link_set_sanitizes_errors(monkeypatch):
 
 
 @pytest.mark.usefixtures("tmp_db")
-async def test_leaderboard_is_public(monkeypatch):
+async def test_leaderboard_defaults_to_private(monkeypatch):
     await db.upsert_pubg_link(1, "account-1", "steam", "PlayerOne")
     cog = LeaderboardCog(SimpleNamespace())
     interaction = FakeInteraction(1)
@@ -98,9 +98,26 @@ async def test_leaderboard_is_public(monkeypatch):
 
     await cog.leaderboard.callback(cog, interaction)
 
+    assert interaction.response.calls == [True]
+    assert interaction.followup.messages[-1]["ephemeral"] is True
+    assert interaction.followup.messages[-1]["view"] is None
+
+
+@pytest.mark.usefixtures("tmp_db")
+async def test_leaderboard_public_visibility(monkeypatch):
+    await db.upsert_pubg_link(1, "account-1", "steam", "PlayerOne")
+    cog = LeaderboardCog(SimpleNamespace())
+    interaction = FakeInteraction(1)
+
+    async def fake_entries(rows):
+        return ["`[#1]` **PlayerOne** :: `2.5h | 3 matches`"]
+
+    monkeypatch.setattr(cog, "_entries", fake_entries)
+
+    await cog.leaderboard.callback(cog, interaction, visibility="public")
+
     assert interaction.response.calls == [False]
     assert interaction.followup.messages[-1]["ephemeral"] is False
-    assert interaction.followup.messages[-1]["view"] is None
 
 
 @pytest.mark.usefixtures("tmp_db")
@@ -135,9 +152,9 @@ async def test_compare_sends_one_embed_with_view(monkeypatch):
     assert message["wait"] is True
 
 
-def test_compare_command_has_no_view_option():
+def test_compare_command_options():
     option_names = [param.name for param in StatsCog.compare.parameters]
-    assert option_names == ["user_a", "user_b"]
+    assert option_names == ["user_a", "user_b", "visibility"]
 
 
 def test_matches_command_is_not_registered():
@@ -211,9 +228,9 @@ async def test_lookup_sends_overview_embed(monkeypatch):
     assert message["embeds"] is None
 
 
-def test_leaderboard_command_has_no_metric_option():
+def test_leaderboard_command_options():
     option_names = [param.name for param in LeaderboardCog.leaderboard.parameters]
-    assert option_names == []
+    assert option_names == ["visibility"]
 
 
 @pytest.mark.usefixtures("tmp_db")

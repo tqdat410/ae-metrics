@@ -72,18 +72,20 @@ class StatsCog(commands.Cog):
             )
 
     @app_commands.command(name="lookup", description="Look up a PUBG account overview without linking it")
-    @app_commands.choices(platform=PLATFORM_CHOICES)
+    @app_commands.choices(platform=PLATFORM_CHOICES, visibility=VISIBILITY_CHOICES)
     async def lookup(
         self,
         interaction: discord.Interaction,
         name: str,
         platform: str = "steam",
+        visibility: str = "private",
     ) -> None:
-        await interaction.response.defer(ephemeral=True)
+        visibility = validate_profile_visibility(visibility)
+        await interaction.response.defer(ephemeral=visibility == "private")
         try:
             platform = validate_platform(platform)
             account = await self.provider.lookup_account(name.strip(), None, platform)
-            await self._send_profile_response(interaction, account, visibility="private")
+            await self._send_profile_response(interaction, account, visibility=visibility)
         except Exception as exc:
             LOGGER.exception("Direct lookup failed")
             await interaction.followup.send(
@@ -92,13 +94,16 @@ class StatsCog(commands.Cog):
             )
 
     @app_commands.command(name="compare", description="Compare two linked PUBG members")
+    @app_commands.choices(visibility=VISIBILITY_CHOICES)
     async def compare(
         self,
         interaction: discord.Interaction,
         user_a: discord.Member,
         user_b: discord.Member,
+        visibility: str = "private",
     ) -> None:
-        await interaction.response.defer(ephemeral=True)
+        visibility = validate_profile_visibility(visibility)
+        await interaction.response.defer(ephemeral=visibility == "private")
         try:
             left_link = await db.get_pubg_link(user_a.id)
             right_link = await db.get_pubg_link(user_b.id)
@@ -119,7 +124,7 @@ class StatsCog(commands.Cog):
             message = await interaction.followup.send(
                 embed=view.current_embed(),
                 view=view,
-                ephemeral=True,
+                ephemeral=visibility == "private",
                 wait=True,
             )
             view.message = message
