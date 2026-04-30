@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from bot import db
+from bot import cache, db
 from bot.config import RECENT_WINDOW
 from bot.providers import account_from_link, get_provider
 
@@ -15,6 +15,7 @@ ACTIVITY_WINDOW_DAYS = 7
 MAX_MATCH_FETCHES_PER_ACCOUNT_PER_TICK = 20
 PLAYER_BATCH_LIMIT = 10
 WARMER_INTERVAL_SECONDS = 300
+STAT_REFRESH_BUFFER_SECONDS = 60
 _task: asyncio.Task | None = None
 
 
@@ -59,6 +60,7 @@ async def tick(provider: Any | None = None) -> None:
 
     summaries: list[dict[str, Any]] = []
     cursors: list[tuple[str, str, dict[str, Any]]] = []
+    stats_refreshed = 0
     for platform_rows in rows_by_platform.values():
         for chunk in _chunked(platform_rows, PLAYER_BATCH_LIMIT):
             accounts = [account_from_link(row) for row in chunk]
@@ -73,6 +75,7 @@ async def tick(provider: Any | None = None) -> None:
                 )
                 summaries.extend(state["summaries"])
                 cursors.append((account.account_id, account.region, state["cursor"]))
+                stats_refreshed += await _warm_stat_sources(provider, account)
 
     if summaries:
         await db.insert_match_summaries_if_absent(summaries, commit=False)
@@ -80,7 +83,12 @@ async def tick(provider: Any | None = None) -> None:
         await db.set_match_cursors(cursors, commit=False)
     if summaries or cursors:
         await db.commit()
-    LOGGER.info("PUBG match warmer tick complete: links=%s new_matches=%s", len(rows), len(summaries))
+    LOGGER.info(
+        "PUBG match warmer tick complete: links=%s new_matches=%s stats_refreshed=%s",
+        len(rows),
+        len(summaries),
+        stats_refreshed,
+    )
 
 
 async def sync_recent_window(provider: Any, account: Any, *, target_recent: int = RECENT_WINDOW) -> list[dict[str, Any]]:
@@ -154,6 +162,50 @@ async def _sync_account_matches(
             "scanned_match_count": scanned,
         },
     }
+
+
+async def _warm_stat_sources(provider: Any, account: Any) -> int:
+    """Pre-warm ranked/lifetime/mastery/metadata caches before TTL expiry.
+
+    Refreshes only when cache is missing or within STAT_REFRESH_BUFFER_SECONDS
+    of expiry, so stat-heavy commands (/profile, /compare) avoid cold-path API.
+    """
+    refreshed = 0
+    season_id = await provider.get_current_season(account.region)
+    iso_now = datetime.now(timezone.utc).isoformat()
+
+    ranked_key = f"source-ranked:all:{season_id}"
+    if await _stat_needs_refresh(account, ranked_key, ttl=cache.CACHE_TTL["source-ranked:"]):
+        payload = await provider.fetch_ranked_view(account, mode="all", season_id=season_id)
+        await db.set_cache(account.account_id, account.region, ranked_key, payload)
+        await db.upsert_stat_snapshot(account.account_id, account.region, "ranked", iso_now, payload)
+        refreshed += 1
+
+    if await _stat_needs_refresh(account, "source-lifetime:all", ttl=cache.CACHE_TTL["source-lifetime:"]):
+        payload = await provider.fetch_lifetime_view(account, mode="all")
+        await db.set_cache(account.account_id, account.region, "source-lifetime:all", payload)
+        await db.upsert_stat_snapshot(account.account_id, account.region, "lifetime", iso_now, payload)
+        refreshed += 1
+
+    if await _stat_needs_refresh(account, "source-mastery:v1", ttl=cache.CACHE_TTL["source-mastery:v1"]):
+        payload = await provider.fetch_mastery_view(account)
+        await db.set_cache(account.account_id, account.region, "source-mastery:v1", payload)
+        refreshed += 1
+
+    if await _stat_needs_refresh(account, "source-account", ttl=15 * 60):
+        payload = await provider.fetch_account_metadata(account)
+        await db.set_cache(account.account_id, account.region, "source-account", payload)
+        refreshed += 1
+
+    return refreshed
+
+
+async def _stat_needs_refresh(account: Any, view: str, *, ttl: int) -> bool:
+    cached = await db.get_cache(account.account_id, account.region, view)
+    if cached is None:
+        return True
+    _, age = cached
+    return age >= max(ttl - STAT_REFRESH_BUFFER_SECONDS, 0)
 
 
 def _chunked(items: list[dict], size: int) -> list[list[dict]]:

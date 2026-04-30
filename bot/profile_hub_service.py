@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,11 +16,13 @@ class ProfileHubService:
 
     async def build(self, account: Any) -> dict[str, Any]:
         season_id = await self.provider.get_current_season(account.region)
-        ranked = await self._ranked_source(account, season_id)
-        lifetime = await self._lifetime_source(account)
-        metadata = await self._metadata_source(account)
-        mastery = await self._mastery_source(account)
-        recent = await self._recent_source(account)
+        ranked, lifetime, metadata, mastery, recent = await asyncio.gather(
+            self._ranked_source(account, season_id),
+            self._lifetime_source(account),
+            self._metadata_source(account),
+            self._mastery_source(account),
+            self._recent_source(account),
+        )
         analysis = analyze_profile(recent)
         return {
             "view": "overview",

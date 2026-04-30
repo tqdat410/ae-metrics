@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import discord
@@ -110,8 +111,10 @@ class StatsCog(commands.Cog):
 
             left_account = account_from_link(left_link)
             right_account = account_from_link(right_link)
-            left = await self.profile_hub.build(left_account)
-            right = await self.profile_hub.build(right_account)
+            left, right = await asyncio.gather(
+                self.profile_hub.build(left_account),
+                self.profile_hub.build(right_account),
+            )
             view = CompareView(user_a.display_name, user_b.display_name, left, right)
             message = await interaction.followup.send(
                 embed=view.current_embed(),

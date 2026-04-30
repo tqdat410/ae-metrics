@@ -8,6 +8,11 @@ class FakeWarmerProvider:
     def __init__(self) -> None:
         self.batch_calls = 0
         self.summary_calls = 0
+        self.season_calls = 0
+        self.ranked_calls = 0
+        self.lifetime_calls = 0
+        self.mastery_calls = 0
+        self.metadata_calls = 0
 
     async def fetch_recent_match_ids_batch(self, accounts, limit=50):
         self.batch_calls += 1
@@ -28,6 +33,26 @@ class FakeWarmerProvider:
             "survival_time_seconds": 600.0 * self.summary_calls,
         }
 
+    async def get_current_season(self, region):
+        self.season_calls += 1
+        return "division.bro.official.pc-2018-30"
+
+    async def fetch_ranked_view(self, account, *, mode, season_id):
+        self.ranked_calls += 1
+        return {"mode": mode, "season_id": season_id}
+
+    async def fetch_lifetime_view(self, account, *, mode):
+        self.lifetime_calls += 1
+        return {"mode": mode}
+
+    async def fetch_mastery_view(self, account):
+        self.mastery_calls += 1
+        return {"weapons": []}
+
+    async def fetch_account_metadata(self, account):
+        self.metadata_calls += 1
+        return {"name": "PlayerOne"}
+
 
 @pytest.mark.usefixtures("tmp_db")
 async def test_match_warmer_tick_inserts_rows_and_dedups():
@@ -43,6 +68,10 @@ async def test_match_warmer_tick_inserts_rows_and_dedups():
 
     assert provider.batch_calls == 2
     assert provider.summary_calls == 3
+    assert provider.ranked_calls == 1
+    assert provider.lifetime_calls == 1
+    assert provider.mastery_calls == 1
+    assert provider.metadata_calls == 1
     assert len(first_rows) == 3
     assert len(second_rows) == 3
     assert first_cursor is not None
