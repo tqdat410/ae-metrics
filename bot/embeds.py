@@ -88,12 +88,41 @@ def make_compare_embed(view: str, left_member: str, right_member: str, left: dic
     return embed
 
 
+_LEADERBOARD_TITLE = "🎮 Bảng Xếp Hạng Nghiện Game"
+_LEADERBOARD_SUBTITLE = "_Top theo tổng giờ chơi 7 ngày qua_"
+_LEADERBOARD_COLOR = 0x7C3AED
+_EMBED_DESCRIPTION_LIMIT = 3800
+
+
+def make_leaderboard_embeds(rows: list[str]) -> list[discord.Embed]:
+    if not rows:
+        embed = discord.Embed(title=_LEADERBOARD_TITLE, color=_LEADERBOARD_COLOR)
+        embed.description = "Chưa có dữ liệu hoạt động 7 ngày."
+        return [embed]
+
+    chunks: list[list[str]] = [[]]
+    chunk_len = 0
+    for row in rows:
+        added = len(row) + 2
+        if chunk_len + added > _EMBED_DESCRIPTION_LIMIT and chunks[-1]:
+            chunks.append([])
+            chunk_len = 0
+        chunks[-1].append(row)
+        chunk_len += added
+
+    embeds: list[discord.Embed] = []
+    for index, chunk in enumerate(chunks):
+        is_first = index == 0
+        title = _LEADERBOARD_TITLE if is_first else f"{_LEADERBOARD_TITLE} (tiếp)"
+        embed = discord.Embed(title=title, color=_LEADERBOARD_COLOR)
+        body = "\n\n".join(chunk)
+        embed.description = f"{_LEADERBOARD_SUBTITLE}\n\n{body}" if is_first else body
+        embeds.append(embed)
+    return embeds
+
+
 def make_leaderboard_embed(rows: list[str]) -> discord.Embed:
-    embed = discord.Embed(title="🎮 Bảng Xếp Hạng Nghiện Game", color=0x7C3AED)
-    body = "\n".join(rows) if rows else "Chưa có dữ liệu hoạt động 7 ngày."
-    embed.description = f"_Top theo tổng giờ chơi 7 ngày qua_\n\n{body}"
-    embed.set_footer(text="💀 >30h · 🚨 >15h · 🔥 >5h · 🎮 >1h · 🌱 >0h · 😴 không hoạt động")
-    return embed
+    return make_leaderboard_embeds(rows)[0]
 
 
 def make_matches_embed(name: str, matches: list[dict[str, Any]]) -> discord.Embed:

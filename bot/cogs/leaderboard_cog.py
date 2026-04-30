@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot import db
-from bot.embeds import make_leaderboard_embed, make_message_embed
+from bot.embeds import make_leaderboard_embeds, make_message_embed
 from bot.validators import PROFILE_VISIBILITIES, validate_profile_visibility
 
 VISIBILITY_CHOICES = [app_commands.Choice(name=value, value=value) for value in PROFILE_VISIBILITIES]
@@ -38,7 +38,7 @@ class LeaderboardCog(commands.Cog):
                 await interaction.followup.send(embed=make_message_embed("Leaderboard", "No PUBG links yet."), ephemeral=ephemeral)
                 return
             entries = await self._entries(rows)
-            await interaction.followup.send(embed=make_leaderboard_embed(entries), ephemeral=ephemeral)
+            await interaction.followup.send(embeds=make_leaderboard_embeds(entries), ephemeral=ephemeral)
         except Exception:
             LOGGER.exception("Leaderboard failed")
             await interaction.followup.send(
@@ -82,14 +82,14 @@ class LeaderboardCog(commands.Cog):
         matches = int(activity.get("match_count") or 0)
         hours = float(activity.get("total_survival_seconds") or 0) / 3600
         rank = _rank_badge(index)
-        tier_emoji, tier_label = _addiction_tier(hours, matches)
-        per_day = hours / ACTIVITY_WINDOW_DAYS
         suffix = " · _đang đồng bộ_" if syncing else ""
         if matches <= 0:
-            return f"{rank} {tier_emoji} **{row['canonical_name']}** — _{tier_label}_{suffix}"
+            return f"{rank} **{row['canonical_name']}** — _Bị Huy cô lập_{suffix}"
+        label = " · _Nghiện nặng_" if index == 1 else ""
+        per_day = hours / ACTIVITY_WINDOW_DAYS
         return (
-            f"{rank} {tier_emoji} **{row['canonical_name']}** — "
-            f"`{hours:.1f}h` · {matches} trận · {per_day:.1f}h/ngày · _{tier_label}_{suffix}"
+            f"{rank} **{row['canonical_name']}** — "
+            f"`{hours:.1f}h` · {matches} trận · {per_day:.1f}h/ngày{label}{suffix}"
         )
 
 
@@ -98,20 +98,6 @@ _RANK_BADGES = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 def _rank_badge(index: int) -> str:
     return _RANK_BADGES.get(index, f"`#{index:>2}`")
-
-
-def _addiction_tier(hours: float, matches: int) -> tuple[str, str]:
-    if matches <= 0:
-        return "😴", "Bỏ game rồi à?"
-    if hours > 30:
-        return "💀", "Hết thuốc chữa"
-    if hours > 15:
-        return "🚨", "Nghiện nặng"
-    if hours > 5:
-        return "🔥", "Phê lắm rồi"
-    if hours > 1:
-        return "🎮", "Casual"
-    return "🌱", "Mới tập"
 
 
 async def setup(bot: commands.Bot) -> None:

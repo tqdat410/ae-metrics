@@ -335,7 +335,7 @@ async def test_leaderboard_entries_include_inactive_users():
     assert len(entries) == 3
     assert "PlayerOne" in entries[0] and "2.0h" in entries[0]
     assert "PlayerTwo" in entries[1] and "0.5h" in entries[1]
-    assert "PlayerThree" in entries[2] and "😴" in entries[2]
+    assert "PlayerThree" in entries[2] and "Bị Huy cô lập" in entries[2]
 
 
 @pytest.mark.usefixtures("tmp_db")
