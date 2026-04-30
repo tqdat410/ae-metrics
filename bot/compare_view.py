@@ -100,7 +100,9 @@ def _add_metric_fields(embed: discord.Embed, left_member: str | None, right_memb
             embed.add_field(name=BLANK, value=BLANK, inline=True)
 
 def _metric_line(member: str, bar: str, text: str) -> str:
-    return f"{f'**{member}:** ' if member else ''}{bar} {text}"
+    if not member:
+        return f"{bar} {text}"
+    return f"**{member}:**\n{bar} {text}"
 
 def _description(page: ComparePage, left_member: str, right_member: str, left_ranked: dict[str, Any], right_ranked: dict[str, Any]) -> str:
     if page == "all": return "**All**  |  Lifetime core stats"
