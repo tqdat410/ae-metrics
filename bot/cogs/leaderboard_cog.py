@@ -37,7 +37,7 @@ class LeaderboardCog(commands.Cog):
             if not rows:
                 await interaction.followup.send(embed=make_message_embed("Leaderboard", "No PUBG links yet."), ephemeral=ephemeral)
                 return
-            entries = await self._entries(rows)
+            entries = await self._entries(rows, guild=interaction.guild)
             await interaction.followup.send(embeds=make_leaderboard_embeds(entries), ephemeral=ephemeral)
         except Exception:
             LOGGER.exception("Leaderboard failed")
@@ -46,7 +46,9 @@ class LeaderboardCog(commands.Cog):
                 ephemeral=ephemeral,
             )
 
-    async def _entries(self, rows: list[dict]) -> list[str]:
+    async def _entries(self, rows: list[dict], *, guild: discord.Guild | None = None) -> list[str]:
+        nghien_emoji = _custom_emoji(guild, "4210_7") or "🚨"
+        co_lap_emoji = _custom_emoji(guild, "zhuy_st5k") or "💀"
         activity_rows = await db.list_match_activity_since_unix(_activity_cutoff_unix())
         activity_by_account = {(item["pubg_account_id"], item["platform"]): item for item in activity_rows}
 
@@ -74,19 +76,35 @@ class LeaderboardCog(commands.Cog):
         syncing.sort(key=lambda item: item[0], reverse=True)
         ranked = synced[:TOP_ROWS] if len(synced) > TOP_ROWS else synced + syncing + inactive
         return [
-            self._line(index, row, activity, syncing=index > len(synced) and int(activity.get("match_count") or 0) > 0)
+            self._line(
+                index,
+                row,
+                activity,
+                syncing=index > len(synced) and int(activity.get("match_count") or 0) > 0,
+                nghien_emoji=nghien_emoji,
+                co_lap_emoji=co_lap_emoji,
+            )
             for index, (_, row, activity) in enumerate(ranked, start=1)
         ]
 
-    def _line(self, index: int, row: dict, activity: dict, *, syncing: bool = False) -> str:
+    def _line(
+        self,
+        index: int,
+        row: dict,
+        activity: dict,
+        *,
+        syncing: bool = False,
+        nghien_emoji: str = "🚨",
+        co_lap_emoji: str = "💀",
+    ) -> str:
         matches = int(activity.get("match_count") or 0)
         hours = float(activity.get("total_survival_seconds") or 0) / 3600
         rank = _rank_badge(index)
         suffix = " · _đang đồng bộ_" if syncing else ""
         if matches <= 0:
-            return f"{rank} **{row['canonical_name']}** — 💀 _Bị Huy cô lập_{suffix}"
+            return f"{rank} **{row['canonical_name']}** — _Bị Huy cô lập_ {co_lap_emoji}{suffix}"
         if index == 1:
-            label = " · 🚨 _Nghiện nặng_"
+            label = f" · _Nghiện nặng_ {nghien_emoji}"
         elif index in (2, 3):
             label = " · 🔥"
         else:
@@ -103,6 +121,21 @@ _RANK_BADGES = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 def _rank_badge(index: int) -> str:
     return _RANK_BADGES.get(index, f"`#{index:>2}`")
+
+
+def _custom_emoji(guild: discord.Guild | None, name: str) -> str | None:
+    """Resolve a server custom emoji by name to its <:name:id> render token.
+
+    Returns None if the guild is missing or the emoji isn't found, so callers
+    can fall back to a unicode default.
+    """
+    if guild is None:
+        return None
+    for emoji in guild.emojis:
+        if emoji.name == name:
+            prefix = "a" if emoji.animated else ""
+            return f"<{prefix}:{emoji.name}:{emoji.id}>"
+    return None
 
 
 async def setup(bot: commands.Bot) -> None:
