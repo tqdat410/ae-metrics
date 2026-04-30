@@ -47,8 +47,10 @@ class LeaderboardCog(commands.Cog):
             )
 
     async def _entries(self, rows: list[dict], *, guild: discord.Guild | None = None) -> list[str]:
-        nghien_emoji = _custom_emoji(guild, "4210_7") or "🚨"
-        co_lap_emoji = _custom_emoji(guild, "zhuy_st5k") or "💀"
+        nghien_custom = _custom_emoji(guild, "4210_7")
+        co_lap_custom = _custom_emoji(guild, "zhuy_st5k")
+        nghien_emoji = f"🚨 {nghien_custom}" if nghien_custom else "🚨"
+        co_lap_emoji = f"💀 {co_lap_custom}" if co_lap_custom else "💀"
         activity_rows = await db.list_match_activity_since_unix(_activity_cutoff_unix())
         activity_by_account = {(item["pubg_account_id"], item["platform"]): item for item in activity_rows}
 
