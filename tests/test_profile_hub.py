@@ -140,7 +140,7 @@ async def test_profile_recent_reads_from_db_without_recent_api_calls():
                 "survival_time_seconds": 600.0 + index,
             }
         )
-    await db.set_match_cursor(account.account_id, account.region, {"fetched_at": 123})
+    await db.set_match_cursor(account.account_id, account.region, {"fetched_at": 123, "recent_ready": True})
 
     payload = await service.build(account)
 

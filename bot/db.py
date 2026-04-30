@@ -393,6 +393,23 @@ async def match_summary_exists(match_id: str, pubg_account_id: str, platform: st
     return await cur.fetchone() is not None
 
 
+async def get_match_summary_record(match_id: str, pubg_account_id: str, platform: str) -> dict[str, Any] | None:
+    cur = await _db().execute(
+        """
+        SELECT match_id, pubg_account_id, platform, played_at, played_at_unix, payload_json
+        FROM match_summaries
+        WHERE match_id=? AND pubg_account_id=? AND platform=?
+        """,
+        (match_id, pubg_account_id, platform),
+    )
+    row = await cur.fetchone()
+    if not row:
+        return None
+    record = dict(row)
+    record["payload"] = json.loads(record["payload_json"])
+    return record
+
+
 async def _insert_match_summary_if_absent(summary: dict[str, Any]) -> None:
     await _db().execute(
         """

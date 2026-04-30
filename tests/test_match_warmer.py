@@ -46,3 +46,5 @@ async def test_match_warmer_tick_inserts_rows_and_dedups():
     assert len(first_rows) == 3
     assert len(second_rows) == 3
     assert first_cursor is not None
+    assert first_cursor["recent_ready"] is True
+    assert first_cursor["full_7d_sync"] is True

@@ -262,6 +262,8 @@ async def test_leaderboard_entries_rank_by_hours_played():
             "survival_time_seconds": 5400,
         }
     )
+    await db.set_match_cursor("account-1", "steam", {"fetched_at": 1, "full_7d_sync": True})
+    await db.set_match_cursor("account-2", "steam", {"fetched_at": 1, "full_7d_sync": True})
     cog = LeaderboardCog(SimpleNamespace())
     rows = await db.list_pubg_links()
 
@@ -306,6 +308,8 @@ async def test_leaderboard_entries_include_inactive_users():
             "survival_time_seconds": 1800,
         }
     )
+    await db.set_match_cursor("account-1", "steam", {"fetched_at": 1, "full_7d_sync": True})
+    await db.set_match_cursor("account-2", "steam", {"fetched_at": 1, "full_7d_sync": True})
 
     cog = LeaderboardCog(SimpleNamespace())
     entries = await cog._entries(await db.list_pubg_links())
@@ -315,3 +319,27 @@ async def test_leaderboard_entries_include_inactive_users():
         "`[#2]` **PlayerTwo** :: `0.5h | 1 matches`",
         "`[#3]` **PlayerThree** :: `0.0h | 0 matches`",
     ]
+
+
+@pytest.mark.usefixtures("tmp_db")
+async def test_leaderboard_marks_unsynced_activity_rows():
+    await db.upsert_pubg_link(1, "account-1", "steam", "PlayerOne")
+    await db.insert_match_summary_if_absent(
+        {
+            "match_id": "match-1",
+            "pubg_account_id": "account-1",
+            "platform": "steam",
+            "game_mode": "squad-fpp",
+            "played_at": "2099-01-10T00:00:00Z",
+            "kills": 2,
+            "damage": 100.0,
+            "assists": 1,
+            "revives": 0,
+            "survival_time_seconds": 7200,
+        }
+    )
+    await db.set_match_cursor("account-1", "steam", {"fetched_at": 1, "full_7d_sync": False, "covered_until_unix": 9999999999})
+
+    entries = await LeaderboardCog(SimpleNamespace())._entries(await db.list_pubg_links())
+
+    assert entries == ["`[#1]` **PlayerOne** :: `2.0h | 1 matches | syncing`"]

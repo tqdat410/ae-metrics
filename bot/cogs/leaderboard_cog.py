@@ -42,25 +42,36 @@ class LeaderboardCog(commands.Cog):
         activity_rows = await db.list_match_activity_since_unix(_activity_cutoff_unix())
         activity_by_account = {(item["pubg_account_id"], item["platform"]): item for item in activity_rows}
 
-        active: list[tuple[float, dict, dict]] = []
+        synced: list[tuple[float, dict, dict]] = []
+        syncing: list[tuple[float, dict, dict]] = []
         inactive: list[tuple[float, dict, dict]] = []
+        cutoff_unix = _activity_cutoff_unix()
         for row in rows:
             activity = activity_by_account.get((row["pubg_account_id"], row["platform"])) or {
                 "match_count": 0,
                 "total_survival_seconds": 0,
             }
             score = float(activity.get("total_survival_seconds") or 0)
-            bucket = active if int(activity.get("match_count") or 0) > 0 else inactive
+            cursor = await db.get_match_cursor(row["pubg_account_id"], row["platform"]) or {}
+            is_synced = bool(cursor.get("full_7d_sync")) or (
+                cursor.get("covered_until_unix") is not None and int(cursor["covered_until_unix"]) <= cutoff_unix
+            )
+            if int(activity.get("match_count") or 0) <= 0:
+                bucket = inactive
+            else:
+                bucket = synced if is_synced else syncing
             bucket.append((score, row, activity))
 
-        active.sort(key=lambda item: item[0], reverse=True)
-        ranked = active[:TOP_ROWS] if len(active) > TOP_ROWS else active + inactive
-        return [self._line(index, row, activity) for index, (_, row, activity) in enumerate(ranked, start=1)]
+        synced.sort(key=lambda item: item[0], reverse=True)
+        syncing.sort(key=lambda item: item[0], reverse=True)
+        ranked = synced[:TOP_ROWS] if len(synced) > TOP_ROWS else synced + syncing + inactive
+        return [self._line(index, row, activity, syncing=index > len(synced) and int(activity.get("match_count") or 0) > 0) for index, (_, row, activity) in enumerate(ranked, start=1)]
 
-    def _line(self, index: int, row: dict, activity: dict) -> str:
+    def _line(self, index: int, row: dict, activity: dict, *, syncing: bool = False) -> str:
         matches = int(activity.get("match_count") or 0)
         hours = float(activity.get("total_survival_seconds") or 0) / 3600
-        return f"`[#{index}]` **{row['canonical_name']}** :: `{hours:.1f}h | {matches} matches`"
+        status = " | syncing" if syncing else ""
+        return f"`[#{index}]` **{row['canonical_name']}** :: `{hours:.1f}h | {matches} matches{status}`"
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -156,6 +156,26 @@ async def test_pubg_provider_fetches_recent_match_ids_batch(respx_mock):
     assert recent_ids == {"acc-1": ["match-1", "match-2"], "acc-2": ["match-3"]}
 
 
+async def test_pubg_provider_fetches_all_recent_match_ids_when_limit_is_none(respx_mock):
+    provider = PubgProvider(client=httpx.AsyncClient(), api_key="test")
+    accounts = [type("Account", (), {"account_id": "acc-1", "canonical_name": "PlayerOne", "region": "steam"})()]
+    respx_mock.get("https://api.pubg.com/shards/steam/players").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"id": "acc-1", "relationships": {"matches": {"data": [{"id": "match-1"}, {"id": "match-2"}, {"id": "match-3"}]}}}
+                ]
+            },
+        )
+    )
+
+    recent_ids = await provider.fetch_recent_match_ids_batch(accounts, limit=None)
+    await provider._client.aclose()
+
+    assert recent_ids == {"acc-1": ["match-1", "match-2", "match-3"]}
+
+
 async def test_pubg_provider_parses_mastery_views(respx_mock):
     provider = PubgProvider(client=httpx.AsyncClient(), api_key="test")
     account = type("Account", (), {"account_id": "acc-1", "canonical_name": "Player", "region": "steam"})()

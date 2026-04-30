@@ -5,6 +5,7 @@ from typing import Any
 
 from bot import cache, db
 from bot.config import RECENT_WINDOW
+from bot.match_warmer import sync_recent_window
 from bot.profile_metrics import analyze_profile, summarize_recent
 
 
@@ -75,34 +76,20 @@ class ProfileHubService:
             return await self._recent_matches(account, RECENT_WINDOW)
 
         payload, _ = await cache.get_or_fetch_view(account.account_id, account.region, key, fetcher)
+        if not isinstance(payload, list):
+            await cache.invalidate(account.account_id, account.region, key)
+            payload, _ = await cache.get_or_fetch_view(account.account_id, account.region, key, fetcher)
         return summarize_recent(payload or [], "all", RECENT_WINDOW)
 
     async def _recent_matches(self, account: Any, limit: int) -> list[dict[str, Any]]:
         stored = await db.list_recent_match_summaries(account.account_id, account.region, limit=limit)
         cursor = await db.get_match_cursor(account.account_id, account.region) or {}
-        if stored and cursor.get("fetched_at"):
+        if stored and cursor.get("recent_ready"):
             return stored
 
-        recent_ids_by_account = await self.provider.fetch_recent_match_ids_batch([account], limit=max(limit, 10))
-        recent_ids = recent_ids_by_account.get(account.account_id) or []
-        if not recent_ids:
-            return []
-
-        for match_id in recent_ids:
-            if await db.match_summary_exists(match_id, account.account_id, account.region):
-                continue
-            await db.insert_match_summary_if_absent(await self.provider.fetch_match_summary(account, match_id))
-        await db.set_match_cursor(account.account_id, account.region, {"fetched_at": _now_unix()})
-
-        refreshed = await db.list_recent_match_summaries(account.account_id, account.region, limit=limit)
-        if refreshed:
-            return refreshed
-        return [await self.provider.fetch_match_summary(account, match_id) for match_id in recent_ids[:limit]]
+        refreshed = await sync_recent_window(self.provider, account, target_recent=limit)
+        return refreshed if refreshed else stored
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _now_unix() -> int:
-    return int(datetime.now(timezone.utc).timestamp())

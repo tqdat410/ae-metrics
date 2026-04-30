@@ -190,7 +190,7 @@ class PubgProvider:
         survival = await self.fetch_survival_mastery(account)
         return {"weapon": weapon, "survival": survival}
 
-    async def fetch_recent_match_ids(self, account: AccountInfo, limit: int = 5) -> list[str]:
+    async def fetch_recent_match_ids(self, account: AccountInfo, limit: int | None = 5) -> list[str]:
         if not account.account_id:
             raise NotFoundError("PUBG account has no account id")
 
@@ -198,9 +198,9 @@ class PubgProvider:
         payload = await self._get_json(url, "PUBG player matches")
         matches = ((payload.get("data") or {}).get("relationships") or {}).get("matches", {}).get("data") or []
         ids = [item.get("id") for item in matches if item.get("id")]
-        return ids[:limit]
+        return ids if limit is None else ids[:limit]
 
-    async def fetch_recent_match_ids_batch(self, accounts: Iterable[AccountInfo], limit: int = 10) -> dict[str, list[str]]:
+    async def fetch_recent_match_ids_batch(self, accounts: Iterable[AccountInfo], limit: int | None = 10) -> dict[str, list[str]]:
         account_list = [account for account in accounts if account.account_id]
         if not account_list:
             return {}
@@ -225,7 +225,8 @@ class PubgProvider:
                 continue
             returned_ids.add(account_id)
             matches = ((player.get("relationships") or {}).get("matches") or {}).get("data") or []
-            recent_ids[account_id] = [item.get("id") for item in matches if item.get("id")][:limit]
+            ids = [item.get("id") for item in matches if item.get("id")]
+            recent_ids[account_id] = ids if limit is None else ids[:limit]
         missing_ids = sorted(set(account_ids) - returned_ids)
         for account_id in missing_ids:
             LOGGER.warning("PUBG player missing from batch matches response: account_id=%s platform=%s", account_id, platform)
