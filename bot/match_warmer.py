@@ -8,7 +8,7 @@ from typing import Any
 
 from bot import cache, db
 from bot.config import RECENT_WINDOW
-from bot.providers import account_from_link, get_provider
+from bot.providers import RateLimitError, account_from_link, get_provider
 
 LOGGER = logging.getLogger(__name__)
 ACTIVITY_WINDOW_DAYS = 7
@@ -61,21 +61,33 @@ async def tick(provider: Any | None = None) -> None:
     summaries: list[dict[str, Any]] = []
     cursors: list[tuple[str, str, dict[str, Any]]] = []
     stats_refreshed = 0
+    stat_warm_blocked = False
     for platform_rows in rows_by_platform.values():
         for chunk in _chunked(platform_rows, PLAYER_BATCH_LIMIT):
             accounts = [account_from_link(row) for row in chunk]
             recent_ids_by_account = await provider.fetch_recent_match_ids_batch(accounts, limit=None)
             for account in accounts:
-                state = await _sync_account_matches(
-                    provider,
-                    account,
-                    recent_ids_by_account.get(account.account_id) or [],
-                    cutoff_unix=cutoff_unix,
-                    fetch_budget=MAX_MATCH_FETCHES_PER_ACCOUNT_PER_TICK,
-                )
+                try:
+                    state = await _sync_account_matches(
+                        provider,
+                        account,
+                        recent_ids_by_account.get(account.account_id) or [],
+                        cutoff_unix=cutoff_unix,
+                        fetch_budget=MAX_MATCH_FETCHES_PER_ACCOUNT_PER_TICK,
+                    )
+                except RateLimitError as exc:
+                    LOGGER.warning("PUBG match sync hit rate limit, deferring rest of tick: %s", exc)
+                    stat_warm_blocked = True
+                    break
                 summaries.extend(state["summaries"])
                 cursors.append((account.account_id, account.region, state["cursor"]))
-                stats_refreshed += await _warm_stat_sources(provider, account)
+                if stat_warm_blocked:
+                    continue
+                try:
+                    stats_refreshed += await _warm_stat_sources(provider, account)
+                except RateLimitError as exc:
+                    LOGGER.warning("PUBG stat warm hit rate limit, deferring rest of tick: %s", exc)
+                    stat_warm_blocked = True
 
     if summaries:
         await db.insert_match_summaries_if_absent(summaries, commit=False)
