@@ -47,10 +47,10 @@ class LeaderboardCog(commands.Cog):
             )
 
     async def _entries(self, rows: list[dict], *, guild: discord.Guild | None = None) -> list[str]:
-        nghien_custom = _custom_emoji(guild, "4210_7")
-        co_lap_custom = _custom_emoji(guild, "zhuy_st5k")
-        nghien_emoji = f"🚨 {nghien_custom}" if nghien_custom else "🚨"
-        co_lap_emoji = f"💀 {co_lap_custom}" if co_lap_custom else "💀"
+        nghien_custom = _custom_emoji(guild, "4210_7") or ""
+        co_lap_custom = _custom_emoji(guild, "zhuy_st50k") or ""
+        top2_custom = _custom_emoji(guild, "le_5") or "🔥"
+        top3_custom = _custom_emoji(guild, "lgbt8") or "🔥"
         activity_rows = await db.list_match_activity_since_unix(_activity_cutoff_unix())
         activity_by_account = {(item["pubg_account_id"], item["platform"]): item for item in activity_rows}
 
@@ -83,8 +83,10 @@ class LeaderboardCog(commands.Cog):
                 row,
                 activity,
                 syncing=index > len(synced) and int(activity.get("match_count") or 0) > 0,
-                nghien_emoji=nghien_emoji,
-                co_lap_emoji=co_lap_emoji,
+                nghien_custom=nghien_custom,
+                co_lap_custom=co_lap_custom,
+                top2_emoji=top2_custom,
+                top3_emoji=top3_custom,
             )
             for index, (_, row, activity) in enumerate(ranked, start=1)
         ]
@@ -96,19 +98,25 @@ class LeaderboardCog(commands.Cog):
         activity: dict,
         *,
         syncing: bool = False,
-        nghien_emoji: str = "🚨",
-        co_lap_emoji: str = "💀",
+        nghien_custom: str = "",
+        co_lap_custom: str = "",
+        top2_emoji: str = "🔥",
+        top3_emoji: str = "🔥",
     ) -> str:
         matches = int(activity.get("match_count") or 0)
         hours = float(activity.get("total_survival_seconds") or 0) / 3600
         rank = _rank_badge(index)
         suffix = " · _đang đồng bộ_" if syncing else ""
         if matches <= 0:
-            return f"{rank} **{row['canonical_name']}** — _Bị Huy cô lập_ {co_lap_emoji}{suffix}"
+            trail = f" {co_lap_custom}" if co_lap_custom else ""
+            return f"{rank} **{row['canonical_name']}** — 💀 _Bị Huy cô lập_{trail}{suffix}"
         if index == 1:
-            label = f" · _Nghiện nặng_ {nghien_emoji}"
-        elif index in (2, 3):
-            label = " · 🔥"
+            trail = f" {nghien_custom}" if nghien_custom else ""
+            label = f" · 🚨 _Nghiện nặng_{trail}"
+        elif index == 2:
+            label = f" · {top2_emoji}"
+        elif index == 3:
+            label = f" · {top3_emoji}"
         else:
             label = ""
         per_day = hours / ACTIVITY_WINDOW_DAYS
