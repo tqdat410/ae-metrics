@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 import discord
+
+BANGKOK_TZ = timezone(timedelta(hours=7))
 
 TIER_COLORS = {
     "UNRANKED": 0x64748B,
@@ -95,9 +98,14 @@ _EMBED_DESCRIPTION_LIMIT = 3800
 
 
 def make_leaderboard_embeds(rows: list[str]) -> list[discord.Embed]:
+    generated_at = datetime.now(BANGKOK_TZ)
+    footer = f"Tổng hợp lúc {generated_at.strftime('%H:%M %d/%m/%Y')} (giờ VN)"
+
     if not rows:
         embed = discord.Embed(title=_LEADERBOARD_TITLE, color=_LEADERBOARD_COLOR)
         embed.description = "Chưa có dữ liệu hoạt động 7 ngày."
+        embed.set_footer(text=footer)
+        embed.timestamp = generated_at
         return [embed]
 
     chunks: list[list[str]] = [[]]
@@ -118,6 +126,8 @@ def make_leaderboard_embeds(rows: list[str]) -> list[discord.Embed]:
         body = "\n\n".join(chunk)
         embed.description = f"{_LEADERBOARD_SUBTITLE}\n\n{body}" if is_first else body
         embeds.append(embed)
+    embeds[-1].set_footer(text=footer)
+    embeds[-1].timestamp = generated_at
     return embeds
 
 
