@@ -84,8 +84,13 @@ class LeaderboardCog(commands.Cog):
         rank = _rank_badge(index)
         suffix = " · _đang đồng bộ_" if syncing else ""
         if matches <= 0:
-            return f"{rank} **{row['canonical_name']}** — _Bị Huy cô lập_{suffix}"
-        label = " · _Nghiện nặng_" if index == 1 else ""
+            return f"{rank} **{row['canonical_name']}** — 💀 _Bị Huy cô lập_{suffix}"
+        if index == 1:
+            label = " · 🚨 _Nghiện nặng_"
+        elif index in (2, 3):
+            label = " · 🔥"
+        else:
+            label = ""
         per_day = hours / ACTIVITY_WINDOW_DAYS
         return (
             f"{rank} **{row['canonical_name']}** — "
