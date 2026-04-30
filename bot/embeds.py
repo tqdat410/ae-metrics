@@ -89,9 +89,10 @@ def make_compare_embed(view: str, left_member: str, right_member: str, left: dic
 
 
 def make_leaderboard_embed(rows: list[str]) -> discord.Embed:
-    embed = discord.Embed(title="PUBG leaderboard: Activity 7D", color=0x2563EB)
-    embed.description = "**7D** | Hours played ranking\n\n"
-    embed.description += "\n".join(rows) if rows else "No 7D activity data available right now."
+    embed = discord.Embed(title="🎮 Bảng Xếp Hạng Nghiện Game", color=0x7C3AED)
+    body = "\n".join(rows) if rows else "Chưa có dữ liệu hoạt động 7 ngày."
+    embed.description = f"_Top theo tổng giờ chơi 7 ngày qua_\n\n{body}"
+    embed.set_footer(text="💀 >30h · 🚨 >15h · 🔥 >5h · 🎮 >1h · 🌱 >0h · 😴 không hoạt động")
     return embed
 
 

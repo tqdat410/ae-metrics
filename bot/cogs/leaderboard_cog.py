@@ -73,13 +73,45 @@ class LeaderboardCog(commands.Cog):
         synced.sort(key=lambda item: item[0], reverse=True)
         syncing.sort(key=lambda item: item[0], reverse=True)
         ranked = synced[:TOP_ROWS] if len(synced) > TOP_ROWS else synced + syncing + inactive
-        return [self._line(index, row, activity, syncing=index > len(synced) and int(activity.get("match_count") or 0) > 0) for index, (_, row, activity) in enumerate(ranked, start=1)]
+        return [
+            self._line(index, row, activity, syncing=index > len(synced) and int(activity.get("match_count") or 0) > 0)
+            for index, (_, row, activity) in enumerate(ranked, start=1)
+        ]
 
     def _line(self, index: int, row: dict, activity: dict, *, syncing: bool = False) -> str:
         matches = int(activity.get("match_count") or 0)
         hours = float(activity.get("total_survival_seconds") or 0) / 3600
-        status = " | syncing" if syncing else ""
-        return f"`[#{index}]` **{row['canonical_name']}** :: `{hours:.1f}h | {matches} matches{status}`"
+        rank = _rank_badge(index)
+        tier_emoji, tier_label = _addiction_tier(hours, matches)
+        per_day = hours / ACTIVITY_WINDOW_DAYS
+        suffix = " · _đang đồng bộ_" if syncing else ""
+        if matches <= 0:
+            return f"{rank} {tier_emoji} **{row['canonical_name']}** — _{tier_label}_{suffix}"
+        return (
+            f"{rank} {tier_emoji} **{row['canonical_name']}** — "
+            f"`{hours:.1f}h` · {matches} trận · {per_day:.1f}h/ngày · _{tier_label}_{suffix}"
+        )
+
+
+_RANK_BADGES = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+
+def _rank_badge(index: int) -> str:
+    return _RANK_BADGES.get(index, f"`#{index:>2}`")
+
+
+def _addiction_tier(hours: float, matches: int) -> tuple[str, str]:
+    if matches <= 0:
+        return "😴", "Bỏ game rồi à?"
+    if hours > 30:
+        return "💀", "Hết thuốc chữa"
+    if hours > 15:
+        return "🚨", "Nghiện nặng"
+    if hours > 5:
+        return "🔥", "Phê lắm rồi"
+    if hours > 1:
+        return "🎮", "Casual"
+    return "🌱", "Mới tập"
 
 
 async def setup(bot: commands.Bot) -> None:

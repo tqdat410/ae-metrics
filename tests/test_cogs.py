@@ -286,10 +286,11 @@ async def test_leaderboard_entries_rank_by_hours_played():
 
     entries = await cog._entries(rows)
 
-    assert entries == [
-        "`[#1]` **PlayerOne** :: `2.5h | 2 matches`",
-        "`[#2]` **PlayerTwo** :: `1.5h | 1 matches`",
-    ]
+    assert len(entries) == 2
+    assert "PlayerOne" in entries[0] and "2.5h" in entries[0] and "2 trận" in entries[0]
+    assert "PlayerTwo" in entries[1] and "1.5h" in entries[1] and "1 trận" in entries[1]
+    assert entries[0].startswith("🥇")
+    assert entries[1].startswith("🥈")
 
 
 @pytest.mark.usefixtures("tmp_db")
@@ -331,11 +332,10 @@ async def test_leaderboard_entries_include_inactive_users():
     cog = LeaderboardCog(SimpleNamespace())
     entries = await cog._entries(await db.list_pubg_links())
 
-    assert entries == [
-        "`[#1]` **PlayerOne** :: `2.0h | 1 matches`",
-        "`[#2]` **PlayerTwo** :: `0.5h | 1 matches`",
-        "`[#3]` **PlayerThree** :: `0.0h | 0 matches`",
-    ]
+    assert len(entries) == 3
+    assert "PlayerOne" in entries[0] and "2.0h" in entries[0]
+    assert "PlayerTwo" in entries[1] and "0.5h" in entries[1]
+    assert "PlayerThree" in entries[2] and "😴" in entries[2]
 
 
 @pytest.mark.usefixtures("tmp_db")
@@ -359,4 +359,7 @@ async def test_leaderboard_marks_unsynced_activity_rows():
 
     entries = await LeaderboardCog(SimpleNamespace())._entries(await db.list_pubg_links())
 
-    assert entries == ["`[#1]` **PlayerOne** :: `2.0h | 1 matches | syncing`"]
+    assert len(entries) == 1
+    assert "PlayerOne" in entries[0]
+    assert "2.0h" in entries[0]
+    assert "đang đồng bộ" in entries[0]
