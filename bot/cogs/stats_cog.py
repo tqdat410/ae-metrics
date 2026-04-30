@@ -49,7 +49,7 @@ class StatsCog(commands.Cog):
         self,
         interaction: discord.Interaction,
         user: discord.Member | None = None,
-        visibility: str = "private",
+        visibility: str = "public",
     ) -> None:
         visibility = validate_profile_visibility(visibility)
         await interaction.response.defer(ephemeral=visibility == "private")
@@ -78,7 +78,7 @@ class StatsCog(commands.Cog):
         interaction: discord.Interaction,
         name: str,
         platform: str = "steam",
-        visibility: str = "private",
+        visibility: str = "public",
     ) -> None:
         visibility = validate_profile_visibility(visibility)
         await interaction.response.defer(ephemeral=visibility == "private")
@@ -100,7 +100,7 @@ class StatsCog(commands.Cog):
         interaction: discord.Interaction,
         user_a: discord.Member,
         user_b: discord.Member,
-        visibility: str = "private",
+        visibility: str = "public",
     ) -> None:
         visibility = validate_profile_visibility(visibility)
         await interaction.response.defer(ephemeral=visibility == "private")

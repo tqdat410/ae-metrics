@@ -28,7 +28,7 @@ class LeaderboardCog(commands.Cog):
 
     @app_commands.command(name="leaderboard", description="Show the PUBG activity leaderboard for linked members")
     @app_commands.choices(visibility=VISIBILITY_CHOICES)
-    async def leaderboard(self, interaction: discord.Interaction, visibility: str = "private") -> None:
+    async def leaderboard(self, interaction: discord.Interaction, visibility: str = "public") -> None:
         visibility = validate_profile_visibility(visibility)
         ephemeral = visibility == "private"
         await interaction.response.defer(ephemeral=ephemeral)

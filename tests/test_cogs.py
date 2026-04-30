@@ -85,12 +85,12 @@ async def test_admin_link_set_sanitizes_errors(monkeypatch):
 
 
 @pytest.mark.usefixtures("tmp_db")
-async def test_leaderboard_defaults_to_private(monkeypatch):
+async def test_leaderboard_defaults_to_public(monkeypatch):
     await db.upsert_pubg_link(1, "account-1", "steam", "PlayerOne")
     cog = LeaderboardCog(SimpleNamespace())
     interaction = FakeInteraction(1)
 
-    async def fake_entries(rows):
+    async def fake_entries(rows, *, guild=None):
         assert rows
         return ["`[#1]` **PlayerOne** :: `2.5h | 3 matches`"]
 
@@ -98,8 +98,8 @@ async def test_leaderboard_defaults_to_private(monkeypatch):
 
     await cog.leaderboard.callback(cog, interaction)
 
-    assert interaction.response.calls == [True]
-    assert interaction.followup.messages[-1]["ephemeral"] is True
+    assert interaction.response.calls == [False]
+    assert interaction.followup.messages[-1]["ephemeral"] is False
     assert interaction.followup.messages[-1]["view"] is None
 
 
@@ -144,8 +144,8 @@ async def test_compare_sends_one_embed_with_view(monkeypatch):
     await cog.compare.callback(cog, interaction, user_a, user_b)
 
     message = interaction.followup.messages[-1]
-    assert interaction.response.calls == [True]
-    assert message["ephemeral"] is True
+    assert interaction.response.calls == [False]
+    assert message["ephemeral"] is False
     assert isinstance(message["view"], CompareView)
     assert message["embed"] is not None
     assert message["embeds"] is None
@@ -187,7 +187,7 @@ async def test_profile_sends_one_embed_with_view(monkeypatch):
     await cog.profile.callback(cog, interaction)
 
     message = interaction.followup.messages[-1]
-    assert interaction.response.calls == [True]
+    assert interaction.response.calls == [False]
     assert isinstance(message["view"], ProfileView)
     assert message["embed"] is not None
     assert message["embeds"] is None
